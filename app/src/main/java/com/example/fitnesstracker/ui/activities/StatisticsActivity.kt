@@ -65,10 +65,12 @@ class StatisticsActivity : BaseActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
     var activities by remember { mutableStateOf<List<ActivityData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var selectedFilter by remember { mutableStateOf(TimeFilter.ALL_TIME) }
 
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -86,99 +88,144 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
 
             override fun onFailure(call: Call<ActivitiesResponse>, t: Throwable) {
                 isLoading = false
-                val errorMsg = when (t) {
-                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
-                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
-                    else -> "Error: ${t.localizedMessage}"
-                }
-                Log.e("Statistics", errorMsg)
+                Log.e("Statistics", "Error: ${t.localizedMessage}")
             }
         })
     }
 
-    val totalCalories = activities.sumOf { it.calories }
-    val totalMinutes = activities.sumOf { it.duration }
-    val totalSessions = activities.size
-    val totalDistance = activities.sumOf { it.distance.toDouble() }
+    // Dynamic Filter Logic
+    val filteredActivities = remember(activities, selectedFilter) {
+        if (selectedFilter == TimeFilter.ALL_TIME) {
+            activities
+        } else {
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            val calendar = java.util.Calendar.getInstance()
+            when (selectedFilter) {
+                TimeFilter.WEEKLY -> calendar.add(java.util.Calendar.DAY_OF_YEAR, -7)
+                TimeFilter.MONTHLY -> calendar.add(java.util.Calendar.MONTH, -1)
+                else -> {}
+            }
+            val thresholdDate = calendar.time
+            activities.filter {
+                try {
+                    val date = dateFormat.parse(it.created_at)
+                    date != null && date.after(thresholdDate)
+                } catch (e: Exception) {
+                    true // Include if parsing fails to avoid missing data
+                }
+            }
+        }
+    }
+
+    val totalCalories = filteredActivities.sumOf { it.calories }
+    val totalMinutes = filteredActivities.sumOf { it.duration }
+    val totalSessions = filteredActivities.size
+    val totalDistance = filteredActivities.sumOf { it.distance.toDouble() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .verticalScroll(rememberScrollState())
     ) {
+        // Modern Header with Back Button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(top = 16.dp, start = 8.dp, end = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
             }
-            Column {
-                Text(
-                    text = "Your Statistics",
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Based on $totalSessions activities",
-                    color = Color.Gray,
-                    fontSize = 14.sp
+            Text(
+                text = "Dashboard",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+
+        // Time Filter Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            TimeFilter.values().forEach { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { selectedFilter = filter },
+                    label = { 
+                        Text(
+                            text = filter.displayName,
+                            fontWeight = if (selectedFilter == filter) FontWeight.Bold else FontWeight.Normal
+                        ) 
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = primaryColor,
+                        selectedLabelColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(24.dp)
                 )
             }
         }
 
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatSummaryCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Calories",
-                    value = totalCalories.toString(),
-                    unit = "kcal",
-                    icon = Icons.Default.LocalFireDepartment,
-                    color = Color(0xFFFF5722)
-                )
-                StatSummaryCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Time",
-                    value = if (totalMinutes >= 60) String.format("%.1f", totalMinutes / 60f) else totalMinutes.toString(),
-                    unit = if (totalMinutes >= 60) "hrs" else "min",
-                    icon = Icons.Default.Timer,
-                    color = Color(0xFF2196F3)
-                )
-            }
-
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState())
+        ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatSummaryCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Sessions",
-                    value = totalSessions.toString(),
-                    unit = "total",
-                    icon = Icons.Default.FitnessCenter,
-                    color = Color(0xFF4CAF50)
-                )
-                StatSummaryCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Distance",
-                    value = String.format("%.1f", totalDistance),
-                    unit = "km",
-                    icon = Icons.Default.Straighten,
-                    color = Color(0xFF9C27B0)
-                )
+            // Stats Grid 
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    StatSummaryCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Calories",
+                        value = totalCalories.toString(),
+                        unit = "kcal",
+                        icon = Icons.Default.LocalFireDepartment,
+                        color = Color(0xFFFF5722)
+                    )
+                    StatSummaryCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Time",
+                        value = if (totalMinutes >= 60) String.format("%.1f", totalMinutes / 60f) else totalMinutes.toString(),
+                        unit = if (totalMinutes >= 60) "hrs" else "min",
+                        icon = Icons.Default.Timer,
+                        color = Color(0xFF2196F3)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    StatSummaryCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Sessions",
+                        value = totalSessions.toString(),
+                        unit = "total",
+                        icon = Icons.Default.FitnessCenter,
+                        color = Color(0xFF4CAF50)
+                    )
+                    StatSummaryCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Distance",
+                        value = String.format("%.1f", totalDistance),
+                        unit = "km",
+                        icon = Icons.Default.Straighten,
+                        color = Color(0xFF9C27B0)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             if (isLoading) {
                 Box(
@@ -189,11 +236,12 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
                 ) {
                     CircularProgressIndicator(color = primaryColor)
                 }
-            } else if (activities.isEmpty()) {
+            } else if (filteredActivities.isEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = surfaceColor)
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -204,17 +252,19 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
                         Icon(
                             Icons.Default.Insights,
                             contentDescription = null,
-                            tint = Color.Gray,
-                            modifier = Modifier.size(64.dp)
+                            tint = Color.Gray.copy(alpha = 0.5f),
+                            modifier = Modifier.size(80.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No activities yet",
+                            text = "No activities found",
                             color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 18.sp
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Start tracking to see statistics!",
+                            text = "Adjust the filter or start tracking!",
                             color = Color.Gray,
                             fontSize = 14.sp
                         )
@@ -224,20 +274,26 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
                 Text(
                     text = "Activity Breakdown",
                     color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                activities.forEach { activity ->
+                filteredActivities.forEach { activity ->
                     ActivityItemCard(activity = activity)
                     Spacer(modifier = Modifier.height(12.dp))
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
+
+enum class TimeFilter(val displayName: String) {
+    WEEKLY("Weekly"),
+    MONTHLY("Monthly"),
+    ALL_TIME("All Time")
 }
 
 @Composable
@@ -253,35 +309,44 @@ fun StatSummaryCard(
 
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp, pressedElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(20.dp),
             horizontalAlignment = Alignment.Start
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = color,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(color.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = value,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = unit,
                     color = Color.Gray,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
-            Text(text = title, color = Color.Gray, fontSize = 12.sp)
+            Text(text = title, color = Color.Gray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -302,8 +367,9 @@ fun ActivityItemCard(activity: ActivityData) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -313,15 +379,15 @@ fun ActivityItemCard(activity: ActivityData) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .background(color.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                    .size(56.dp)
+                    .background(color.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = activity.activity_type,
                     tint = color,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
@@ -329,21 +395,22 @@ fun ActivityItemCard(activity: ActivityData) {
                 Text(
                     text = activity.activity_type,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${activity.duration} min • ${String.format("%.1f", activity.distance)} km",
                     color = Color.Gray,
-                    fontSize = 13.sp
+                    fontSize = 14.sp
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "${activity.calories}",
                     color = primaryColor,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
                 Text(
                     text = "kcal",
