@@ -1,10 +1,17 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.ui.activities
+
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.ActivityRequest
+import com.example.fitnesstracker.data.network.ActivityResponse
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
+import com.example.fitnesstracker.utils.StatBox
 
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -71,10 +78,9 @@ fun TrackingScreen(
     var hasPermission by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
-    val darkPurple = Color(0xFF1A0A2E)
-    val purple = Color(0xFF6B4C9A)
-    val lightPurple = Color(0xFF9B7DD4)
-    val cardBg = Color(0xFF2D1B4E)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     // Permission launcher
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -115,19 +121,26 @@ fun TrackingScreen(
     }
 
     // Location tracking
-    LaunchedEffect(isTracking, hasPermission) {
+    DisposableEffect(isTracking, hasPermission) {
+        var locationCallback: LocationCallback? = null
+
         if (isTracking && hasPermission) {
             val locationRequest = LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY, 1000
             ).build()
 
-            val locationCallback = object : LocationCallback() {
+            locationCallback = object : LocationCallback() {
+                private var lastLocation: android.location.Location? = null
+
                 override fun onLocationResult(locationResult: LocationResult) {
                     locationResult.lastLocation?.let { location ->
                         currentSpeed = location.speed
-                        if (isTracking) {
-                            distanceMeters += location.speed
+                        
+                        if (lastLocation != null) {
+                            val distance = lastLocation!!.distanceTo(location)
+                            distanceMeters += distance
                         }
+                        lastLocation = location
                     }
                 }
             }
@@ -135,21 +148,27 @@ fun TrackingScreen(
             try {
                 activity.fusedLocationClient.requestLocationUpdates(
                     locationRequest,
-                    locationCallback,
+                    locationCallback!!,
                     Looper.getMainLooper()
                 )
             } catch (e: SecurityException) {
-                // Handle permission issue
+                Log.e("Tracking", "Permission error: ${e.message}")
+            }
+        }
+
+        onDispose {
+            locationCallback?.let {
+                activity.fusedLocationClient.removeLocationUpdates(it)
             }
         }
     }
 
     // Format time
-    fun formatTime(seconds: Long): String {
-        val hrs = seconds / 3600
-        val mins = (seconds % 3600) / 60
-        val secs = seconds % 60
-        return if (hrs > 0) {
+    val formattedTime = remember(durationSeconds) {
+        val hrs = durationSeconds / 3600
+        val mins = (durationSeconds % 3600) / 60
+        val secs = durationSeconds % 60
+        if (hrs > 0) {
             String.format("%02d:%02d:%02d", hrs, mins, secs)
         } else {
             String.format("%02d:%02d", mins, secs)
@@ -157,19 +176,21 @@ fun TrackingScreen(
     }
 
     // Format distance
-    fun formatDistance(meters: Float): String {
-        val km = meters / 1000f
-        return String.format("%.2f", km)
+    val formattedDistance = remember(distanceMeters) {
+        val km = distanceMeters / 1000f
+        String.format("%.2f", km)
     }
 
     // Calculate pace (min/km)
-    fun calculatePace(): String {
-        if (distanceMeters < 100) return "--:--"
-        val km = distanceMeters / 1000f
-        val minutesPerKm = (durationSeconds / 60f) / km
-        val mins = minutesPerKm.toInt()
-        val secs = ((minutesPerKm - mins) * 60).toInt()
-        return String.format("%d:%02d", mins, secs)
+    val pace = remember(durationSeconds, distanceMeters) {
+        if (distanceMeters < 100) "--:--"
+        else {
+            val km = distanceMeters / 1000f
+            val minutesPerKm = (durationSeconds / 60f) / km
+            val mins = minutesPerKm.toInt()
+            val secs = ((minutesPerKm - mins) * 60).toInt()
+            String.format("%d:%02d", mins, secs)
+        }
     }
 
     // Calculate calories (simplified)
@@ -223,13 +244,13 @@ fun TrackingScreen(
         "Running" -> Icons.Default.DirectionsRun
         "Cycling" -> Icons.Default.DirectionsBike
         "Walking" -> Icons.Default.DirectionsWalk
-        else -> Icons.Default.DirectionsRun
+        else -> Icons.Default.Favorite // Changed to Favorite for a better match with the heart theme
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(darkPurple)
+            .background(backgroundColor)
     ) {
         // Header
         Row(
@@ -242,19 +263,19 @@ fun TrackingScreen(
                 Icon(
                     Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
             Icon(
                 imageVector = activityIcon,
                 contentDescription = activityType,
-                tint = lightPurple,
+                tint = primaryColor,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = activityType,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -278,7 +299,7 @@ fun TrackingScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Location permission required",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 18.sp
                     )
                     Text(
@@ -302,7 +323,7 @@ fun TrackingScreen(
                         .fillMaxWidth()
                         .height(200.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = cardBg)
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -320,7 +341,7 @@ fun TrackingScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = "GPS Tracking Active",
-                                color = if (isTracking) Color(0xFF4CAF50) else Color.Gray,
+                                color = if (isTracking) MaterialTheme.colorScheme.secondary else Color.Gray,
                                 fontSize = 14.sp
                             )
                         }
@@ -331,15 +352,15 @@ fun TrackingScreen(
 
                 // Timer
                 Text(
-                    text = formatTime(durationSeconds),
-                    color = Color.White,
+                    text = formattedTime,
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 56.sp,
                     fontWeight = FontWeight.Bold
                 )
 
                 Text(
                     text = if (isTracking) "In Progress" else "Ready",
-                    color = if (isTracking) Color(0xFF4CAF50) else Color.Gray,
+                    color = if (isTracking) MaterialTheme.colorScheme.secondary else Color.Gray,
                     fontSize = 16.sp
                 )
 
@@ -352,18 +373,21 @@ fun TrackingScreen(
                 ) {
                     StatBox(
                         label = "Distance",
-                        value = formatDistance(distanceMeters),
-                        unit = "km"
+                        value = formattedDistance,
+                        unit = "km",
+                        cardBg = surfaceColor
                     )
                     StatBox(
                         label = "Pace",
-                        value = calculatePace(),
-                        unit = "min/km"
+                        value = pace,
+                        unit = "min/km",
+                        cardBg = surfaceColor
                     )
                     StatBox(
                         label = "Speed",
                         value = String.format("%.1f", currentSpeed * 3.6f),
-                        unit = "km/h"
+                        unit = "km/h",
+                        cardBg = surfaceColor
                     )
                 }
 
@@ -377,19 +401,21 @@ fun TrackingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(60.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Icon(
                             Icons.Default.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(32.dp),
+                            tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "START $activityType".uppercase(),
                             fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 } else {
@@ -402,7 +428,7 @@ fun TrackingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(60.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                         shape = RoundedCornerShape(16.dp),
                         enabled = !isSaving
                     ) {
@@ -429,44 +455,6 @@ fun TrackingScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
-        }
-    }
-}
-
-@Composable
-fun StatBox(
-    label: String,
-    value: String,
-    unit: String
-) {
-    val cardBg = Color(0xFF2D1B4E)
-
-    Card(
-        modifier = Modifier.width(100.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = value,
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = unit,
-                color = Color.Gray,
-                fontSize = 10.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = label,
-                color = Color.Gray,
-                fontSize = 12.sp
-            )
         }
     }
 }

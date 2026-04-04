@@ -1,9 +1,10 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.utils
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -45,10 +46,11 @@ abstract class BaseActivity : ComponentActivity() {
     // Accessible to this class and subclasses only
     // ========================================
 
-    protected val darkPurple: Color = Color(0xFF1A0A2E)
-    protected val purple: Color = Color(0xFF6B4C9A)
-    protected val lightPurple: Color = Color(0xFF9B7DD4)
-    protected val cardBg: Color = Color(0xFF2D1B4E)
+    // Legacy colors - kept for compatibility but subclasses should use MaterialTheme
+    protected val darkPurple: Color = Color(0xFF0B132B) // New DarkNavy
+    protected val purple: Color = Color(0xFF00E5FF)     // New NeonCyan
+    protected val lightPurple: Color = Color(0xFFC6FF00)  // New ElectricLime
+    protected val cardBg: Color = Color(0xFF1C2541)     // New DeepNavy
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,7 +104,7 @@ fun CommonHeader(
     title: String,
     subtitle: String = "",
     onBackClick: () -> Unit,
-    darkPurple: Color = Color(0xFF1A0A2E)
+    darkPurple: Color = MaterialTheme.colorScheme.background
 ) {
     Row(
         modifier = Modifier
@@ -115,14 +117,14 @@ fun CommonHeader(
             Icon(
                 Icons.Default.ArrowBack,
                 contentDescription = "Back",
-                tint = Color.White
+                tint = MaterialTheme.colorScheme.onBackground
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
         Column {
             Text(
                 text = title,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -133,6 +135,50 @@ fun CommonHeader(
                     fontSize = 14.sp
                 )
             }
+        }
+    }
+}
+
+/**
+ * Composable function for a small statistics box
+ * Displays a value, unit, and label in a card
+ */
+@Composable
+fun StatBox(
+    label: String,
+    value: String,
+    unit: String,
+    cardBg: Color
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+
+    Card(
+        modifier = Modifier.width(100.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = onSurfaceColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = unit,
+                color = primaryColor.copy(alpha = 0.7f),
+                fontSize = 10.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                color = Color.Gray,
+                fontSize = 12.sp
+            )
         }
     }
 }

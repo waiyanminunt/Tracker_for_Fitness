@@ -1,4 +1,11 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.utils
+import com.example.fitnesstracker.R
+
+import com.example.fitnesstracker.data.network.*
+import com.example.fitnesstracker.data.models.*
+import com.example.fitnesstracker.utils.*
+import com.example.fitnesstracker.receivers.*
+import com.example.fitnesstracker.ui.activities.*
 
 import android.content.Context
 import android.content.SharedPreferences

@@ -1,4 +1,4 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.data.network
 
 import retrofit2.Call
 import retrofit2.http.*
@@ -62,6 +62,18 @@ data class ActivityData(
     val created_at: String
 )
 
+data class UpdateProfileRequest(
+    val user_id: Int,
+    val name: String,
+    val email: String
+)
+
+data class UpdateProfileResponse(
+    val success: Boolean,
+    val message: String,
+    val user: User?
+)
+
 interface ApiService {
 
     @POST("register.php")
@@ -75,4 +87,7 @@ interface ApiService {
 
     @GET("get_activities.php")
     fun getActivities(@Query("user_id") userId: Int): Call<ActivitiesResponse>
+
+    @POST("update_profile.php")
+    fun updateProfile(@Body request: UpdateProfileRequest): Call<UpdateProfileResponse>
 }

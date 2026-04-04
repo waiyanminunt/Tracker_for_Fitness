@@ -20,28 +20,29 @@ if (!isset($data['user_id']) || !isset($data['activity_type']) || !isset($data['
 }
 
  $user_id = (int)$data['user_id'];
- $activity_type = $conn->real_escape_string($data['activity_type']);
+ $activity_type = $data['activity_type'];
  $duration = (int)$data['duration'];
- $distance = isset($data['distance']) ? (float)$data['distance'] : 0;
+ $distance = isset($data['distance']) ? (float)$data['distance'] : 0.0;
  $calories = isset($data['calories']) ? (int)$data['calories'] : 0;
- $notes = isset($data['notes']) ? $conn->real_escape_string($data['notes']) : '';
+ $notes = isset($data['notes']) ? $data['notes'] : '';
 
-// Insert activity
- $sql = "INSERT INTO activities (user_id, activity_type, duration, distance, calories, notes) 
-        VALUES ($user_id, '$activity_type', $duration, $distance, $calories, '$notes')";
+// Insert activity using Prepared Statements
+ $stmt = $conn->prepare("INSERT INTO activities (user_id, activity_type, duration, distance, calories, notes) VALUES (?, ?, ?, ?, ?, ?)");
+ $stmt->bind_param("isddis", $user_id, $activity_type, $duration, $distance, $calories, $notes);
 
-if ($conn->query($sql)) {
+if ($stmt->execute()) {
     echo json_encode([
         'success' => true,
         'message' => 'Activity saved successfully',
-        'activity_id' => $conn->insert_id
+        'activity_id' => (int)$conn->insert_id
     ]);
 } else {
     echo json_encode([
         'success' => false,
-        'message' => 'Failed to save activity: ' . $conn->error
+        'message' => 'Failed to save activity: ' . $stmt->error
     ]);
 }
 
+ $stmt->close();
  $conn->close();
 ?>

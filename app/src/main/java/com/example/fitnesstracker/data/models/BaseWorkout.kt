@@ -1,4 +1,11 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.data.models
+import com.example.fitnesstracker.R
+
+import com.example.fitnesstracker.data.network.*
+import com.example.fitnesstracker.data.models.*
+import com.example.fitnesstracker.utils.*
+import com.example.fitnesstracker.receivers.*
+import com.example.fitnesstracker.ui.activities.*
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*

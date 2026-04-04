@@ -1,4 +1,11 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.receivers
+import com.example.fitnesstracker.R
+
+import com.example.fitnesstracker.data.network.*
+import com.example.fitnesstracker.data.models.*
+import com.example.fitnesstracker.utils.*
+import com.example.fitnesstracker.receivers.*
+import com.example.fitnesstracker.ui.activities.*
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,6 +21,10 @@ class WaterReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         createNotificationChannel(context)
+
+        // Save to notification history
+        val notificationHelper = NotificationHelper(context)
+        notificationHelper.addWaterReminder()
 
         val notificationIntent = Intent(context, LoginActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(

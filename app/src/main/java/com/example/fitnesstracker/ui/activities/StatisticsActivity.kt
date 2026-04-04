@@ -1,4 +1,11 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.ui.activities
+
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.ActivitiesResponse
+import com.example.fitnesstracker.data.network.ActivityData
+import com.example.fitnesstracker.utils.BaseActivity
+import com.example.fitnesstracker.utils.CommonHeader
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.os.Bundle
 import android.util.Log
@@ -48,10 +55,12 @@ class StatisticsActivity : BaseActivity() {
         val userId = getUserId()
 
         setContent {
-            StatisticsScreenContent(
-                userId = userId,
-                onBack = { finish() }
-            )
+            FitnesstrackerTheme {
+                StatisticsScreenContent(
+                    userId = userId,
+                    onBack = { finish() }
+                )
+            }
         }
     }
 }
@@ -61,9 +70,9 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
     var activities by remember { mutableStateOf<List<ActivityData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    val darkPurple = Color(0xFF1A0A2E)
-    val lightPurple = Color(0xFF9B7DD4)
-    val cardBg = Color(0xFF2D1B4E)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     LaunchedEffect(userId) {
         ApiClient.apiService.getActivities(userId).enqueue(object : Callback<ActivitiesResponse> {
@@ -77,7 +86,12 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
 
             override fun onFailure(call: Call<ActivitiesResponse>, t: Throwable) {
                 isLoading = false
-                Log.e("Statistics", "Error: ${t.message}")
+                val errorMsg = when (t) {
+                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
+                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                    else -> "Error: ${t.localizedMessage}"
+                }
+                Log.e("Statistics", errorMsg)
             }
         })
     }
@@ -90,19 +104,30 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(darkPurple)
+            .background(backgroundColor)
             .verticalScroll(rememberScrollState())
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
             }
             Column {
-                Text(text = "Your Statistics", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Based on $totalSessions activities", color = Color.Gray, fontSize = 14.sp)
+                Text(
+                    text = "Your Statistics",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Based on $totalSessions activities",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
             }
         }
 
@@ -156,27 +181,52 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
 
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = lightPurple)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = primaryColor)
                 }
             } else if (activities.isEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = cardBg)
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor)
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.Default.BarChart, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(64.dp))
+                        Icon(
+                            Icons.Default.Insights,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(64.dp)
+                        )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = "No activities yet", color = Color.White, fontSize = 18.sp)
-                        Text(text = "Start tracking to see statistics!", color = Color.Gray, fontSize = 14.sp)
+                        Text(
+                            text = "No activities yet",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            text = "Start tracking to see statistics!",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             } else {
-                Text(text = "Activity Breakdown", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Activity Breakdown",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.height(12.dp))
 
                 activities.forEach { activity ->
@@ -199,20 +249,37 @@ fun StatSummaryCard(
     icon: ImageVector,
     color: Color
 ) {
-    val cardBg = Color(0xFF2D1B4E)
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg)
+        colors = CardDefaults.cardColors(containerColor = surfaceColor)
     ) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.Start) {
-            Icon(imageVector = icon, contentDescription = title, tint = color, modifier = Modifier.size(28.dp))
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = color,
+                modifier = Modifier.size(28.dp)
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(text = value, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = value,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(text = unit, color = Color.Gray, fontSize = 14.sp)
+                Text(
+                    text = unit,
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
             }
             Text(text = title, color = Color.Gray, fontSize = 12.sp)
         }
@@ -221,8 +288,8 @@ fun StatSummaryCard(
 
 @Composable
 fun ActivityItemCard(activity: ActivityData) {
-    val cardBg = Color(0xFF2D1B4E)
-    val lightPurple = Color(0xFF9B7DD4)
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     val (icon, color) = when (activity.activity_type) {
         "Running" -> Icons.Default.DirectionsRun to Color(0xFF4CAF50)
@@ -236,26 +303,53 @@ fun ActivityItemCard(activity: ActivityData) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg)
+        colors = CardDefaults.cardColors(containerColor = surfaceColor)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(48.dp).background(color.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(color.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = activity.activity_type, tint = color, modifier = Modifier.size(24.dp))
+                Icon(
+                    imageVector = icon,
+                    contentDescription = activity.activity_type,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = activity.activity_type, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(text = "${activity.duration} min • ${String.format("%.1f", activity.distance)} km", color = Color.Gray, fontSize = 13.sp)
+                Text(
+                    text = activity.activity_type,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${activity.duration} min • ${String.format("%.1f", activity.distance)} km",
+                    color = Color.Gray,
+                    fontSize = 13.sp
+                )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(text = "${activity.calories}", color = lightPurple, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "kcal", color = Color.Gray, fontSize = 12.sp)
+                Text(
+                    text = "${activity.calories}",
+                    color = primaryColor,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "kcal",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
             }
         }
     }

@@ -19,8 +19,8 @@ if (!isset($data['name']) || !isset($data['email']) || !isset($data['password'])
     exit;
 }
 
- $name = $conn->real_escape_string($data['name']);
- $email = $conn->real_escape_string($data['email']);
+ $name = $data['name'];
+ $email = $data['email'];
  $password = $data['password'];
 
 // Validate email
@@ -32,36 +32,42 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
-// Check if email already exists
- $checkEmail = "SELECT id FROM users WHERE email = '$email'";
- $result = $conn->query($checkEmail);
+// Check if email already exists using Prepared Statements
+ $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
+ $stmt->bind_param("s", $email);
+ $stmt->execute();
+ $result = $stmt->get_result();
 
 if ($result->num_rows > 0) {
     echo json_encode([
         'success' => false,
         'message' => 'Email already registered'
     ]);
+    $stmt->close();
     exit;
 }
+ $stmt->close();
 
 // Hash the password
  $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-// Insert new user
- $sql = "INSERT INTO users (name, email, password) VALUES ('$name', '$email', '$hashedPassword')";
+// Insert new user using Prepared Statements
+ $stmt = $conn->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
+ $stmt->bind_param("sss", $name, $email, $hashedPassword);
 
-if ($conn->query($sql)) {
+if ($stmt->execute()) {
     echo json_encode([
         'success' => true,
         'message' => 'Registration successful',
-        'user_id' => $conn->insert_id
+        'user_id' => (int)$conn->insert_id
     ]);
 } else {
     echo json_encode([
         'success' => false,
-        'message' => 'Registration failed: ' . $conn->error
+        'message' => 'Registration failed: ' . $stmt->error
     ]);
 }
 
+ $stmt->close();
  $conn->close();
 ?>

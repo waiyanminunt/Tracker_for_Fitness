@@ -1,4 +1,13 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.ui.activities
+
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.ActivityRequest
+import com.example.fitnesstracker.data.network.ActivityResponse
+import com.example.fitnesstracker.utils.BaseActivity
+import com.example.fitnesstracker.utils.CommonHeader
+import com.example.fitnesstracker.data.models.CardioWorkout
+import com.example.fitnesstracker.data.models.StrengthWorkout
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.content.Intent
 import android.os.Bundle
@@ -79,9 +88,8 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
     // Activities that need GPS tracking
     val gpsActivities = listOf("Running", "Cycling", "Walking")
 
-    val darkPurple = Color(0xFF1A0A2E)
-    val purple = Color(0xFF6B4C9A)
-    val lightPurple = Color(0xFF9B7DD4)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val backgroundColor = MaterialTheme.colorScheme.background
 
     // Navigate to TrackingActivity if GPS activity is selected
     LaunchedEffect(selectedActivity) {
@@ -97,7 +105,7 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(darkPurple)
+            .background(backgroundColor)
     ) {
         // Header
         Row(
@@ -116,12 +124,12 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
                 Icon(
                     Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
             Text(
                 text = if (selectedActivity == null) "Select Activity" else "Add $selectedActivity",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 8.dp)
@@ -148,11 +156,10 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
 
 @Composable
 fun ActivitySelectionGrid(onActivitySelected: (String) -> Unit) {
-    val lightPurple = Color(0xFF9B7DD4)
-    val cardBg = Color(0xFF2D1B4E)
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     val activities = listOf(
-        Triple("Running", Icons.Default.DirectionsRun, Color(0xFF4CAF50)),
+        Triple("Running", Icons.Default.DirectionsRun, MaterialTheme.colorScheme.primary),
         Triple("Cycling", Icons.Default.DirectionsBike, Color(0xFF2196F3)),
         Triple("Swimming", Icons.Default.Pool, Color(0xFF00BCD4)),
         Triple("Weightlifting", Icons.Default.FitnessCenter, Color(0xFFFF9800)),
@@ -170,7 +177,7 @@ fun ActivitySelectionGrid(onActivitySelected: (String) -> Unit) {
     ) {
         Text(
             text = "What did you do today?",
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 18.sp,
             fontWeight = FontWeight.Medium
         )
@@ -206,14 +213,14 @@ fun ActivityCardLarge(
     hasGps: Boolean,
     onClick: () -> Unit
 ) {
-    val cardBg = Color(0xFF2D1B4E)
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg)
+        colors = CardDefaults.cardColors(containerColor = surfaceColor)
     ) {
         Row(
             modifier = Modifier
@@ -224,7 +231,7 @@ fun ActivityCardLarge(
             Box(
                 modifier = Modifier
                     .size(56.dp)
-                    .background(color.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
+                    .background(color.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -240,7 +247,7 @@ fun ActivityCardLarge(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = name,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -285,9 +292,8 @@ fun ActivityInputForm(
     var notes by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
 
-    val purple = Color(0xFF6B4C9A)
-    val lightPurple = Color(0xFF9B7DD4)
-    val accent = Color(0xFFE94560)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val accent = MaterialTheme.colorScheme.tertiary
 
     // ============================================
     // POLYMORPHISM DEMONSTRATION
@@ -342,7 +348,7 @@ fun ActivityInputForm(
         if (duration.isNotEmpty() && calculatedCalories > 0) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = purple.copy(alpha = 0.3f)),
+                colors = CardDefaults.cardColors(containerColor = primaryColor.copy(alpha = 0.1f)),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
@@ -366,7 +372,7 @@ fun ActivityInputForm(
                         )
                         Text(
                             text = "$calculatedCalories kcal",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -385,21 +391,21 @@ fun ActivityInputForm(
         OutlinedTextField(
             value = duration,
             onValueChange = { duration = it },
-            label = { Text("Duration (minutes)", color = Color.White) },
+            label = { Text("Duration (minutes)", color = Color.Gray) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = purple,
-                unfocusedBorderColor = lightPurple,
-                focusedLabelColor = Color.White,
-                cursorColor = purple,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedBorderColor = primaryColor,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = primaryColor,
+                cursorColor = primaryColor,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
             ),
             shape = RoundedCornerShape(12.dp),
             leadingIcon = {
-                Icon(Icons.Default.Timer, contentDescription = null, tint = lightPurple)
+                Icon(Icons.Default.Timer, contentDescription = null, tint = primaryColor)
             }
         )
 
@@ -409,21 +415,21 @@ fun ActivityInputForm(
         OutlinedTextField(
             value = distance,
             onValueChange = { distance = it },
-            label = { Text("Distance (km) - optional", color = Color.White) },
+            label = { Text("Distance (km) - optional", color = Color.Gray) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = purple,
-                unfocusedBorderColor = lightPurple,
-                focusedLabelColor = Color.White,
-                cursorColor = purple,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedBorderColor = primaryColor,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = primaryColor,
+                cursorColor = primaryColor,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
             ),
             shape = RoundedCornerShape(12.dp),
             leadingIcon = {
-                Icon(Icons.Default.Straighten, contentDescription = null, tint = lightPurple)
+                Icon(Icons.Default.Straighten, contentDescription = null, tint = primaryColor)
             }
         )
 
@@ -433,21 +439,21 @@ fun ActivityInputForm(
         OutlinedTextField(
             value = notes,
             onValueChange = { notes = it },
-            label = { Text("Notes (optional)", color = Color.White) },
+            label = { Text("Notes (optional)", color = Color.Gray) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = purple,
-                unfocusedBorderColor = lightPurple,
-                focusedLabelColor = Color.White,
-                cursorColor = purple,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedBorderColor = primaryColor,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = primaryColor,
+                cursorColor = primaryColor,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
             ),
             shape = RoundedCornerShape(12.dp),
             leadingIcon = {
-                Icon(Icons.Default.Edit, contentDescription = null, tint = lightPurple)
+                Icon(Icons.Default.Edit, contentDescription = null, tint = primaryColor)
             }
         )
 
@@ -483,7 +489,12 @@ fun ActivityInputForm(
 
                         override fun onFailure(call: Call<ActivityResponse>, t: Throwable) {
                             isSaving = false
-                            Toast.makeText(context, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
+                            val errorMsg = when (t) {
+                                is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
+                                is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                                else -> "Error: ${t.localizedMessage}"
+                            }
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                         }
                     })
                 } else {
@@ -492,23 +503,24 @@ fun ActivityInputForm(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = purple),
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
             shape = RoundedCornerShape(12.dp),
             enabled = !isSaving
         ) {
             if (isSaving) {
                 CircularProgressIndicator(
-                    color = Color.White,
+                    color = Color.Black,
                     modifier = Modifier.size(24.dp)
                 )
             } else {
-                Icon(Icons.Default.Check, contentDescription = null)
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "SAVE ACTIVITY",
+                    color = Color.White,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
         }

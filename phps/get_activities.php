@@ -17,13 +17,11 @@ if ($user_id === 0) {
     exit;
 }
 
-// Get activities for user
- $sql = "SELECT id, activity_type, duration, distance, calories, notes, created_at 
-        FROM activities 
-        WHERE user_id = $user_id 
-        ORDER BY created_at DESC";
-
- $result = $conn->query($sql);
+// Get activities for user using Prepared Statements
+ $stmt = $conn->prepare("SELECT id, activity_type, duration, distance, calories, notes, created_at FROM activities WHERE user_id = ? ORDER BY created_at DESC");
+ $stmt->bind_param("i", $user_id);
+ $stmt->execute();
+ $result = $stmt->get_result();
 
  $activities = [];
 
@@ -46,5 +44,6 @@ echo json_encode([
     'activities' => $activities
 ]);
 
+ $stmt->close();
  $conn->close();
 ?>

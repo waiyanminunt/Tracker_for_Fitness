@@ -1,4 +1,13 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.ui.activities
+
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.LoginRequest
+import com.example.fitnesstracker.data.network.LoginResponse
+import com.example.fitnesstracker.data.network.RegisterRequest
+import com.example.fitnesstracker.data.network.RegisterResponse
+import com.example.fitnesstracker.data.network.User
+import com.example.fitnesstracker.R
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.content.Intent
 import android.os.Bundle
@@ -14,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -31,16 +41,18 @@ class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            LoginScreen(
-                onLoginSuccess = { user ->
-                    val intent = Intent(this, DashboardActivity::class.java)
-                    intent.putExtra("USER_ID", user.id)
-                    intent.putExtra("USER_NAME", user.name)
-                    intent.putExtra("USER_EMAIL", user.email)
-                    startActivity(intent)
-                    finish()
-                }
-            )
+            FitnesstrackerTheme {
+                LoginScreen(
+                    onLoginSuccess = { user ->
+                        val intent = Intent(this, DashboardActivity::class.java)
+                        intent.putExtra("USER_ID", user.id)
+                        intent.putExtra("USER_NAME", user.name)
+                        intent.putExtra("USER_EMAIL", user.email)
+                        startActivity(intent)
+                        finish()
+                    }
+                )
+            }
         }
     }
 }
@@ -56,34 +68,44 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
-    val darkPurple = Color(0xFF1A0A2E)
-    val purple = Color(0xFF6B4C9A)
-    val lightPurple = Color(0xFF9B7DD4)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(darkPurple)
+            .background(backgroundColor)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(40.dp))
 
         // Logo
-        Image(
-            painter = painterResource(id = R.drawable.pulse),
-            contentDescription = "App Logo",
-            modifier = Modifier.size(100.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(primaryColor.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.heart_pulse),
+                contentDescription = "App Logo",
+                modifier = Modifier.size(64.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         // App Name
         Text(
             text = "Fitness Tracker",
-            color = Color.White,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold
+            color = onSurfaceColor,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.ExtraBold
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -91,7 +113,7 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
         // Subtitle
         Text(
             text = if (isLoginMode) "Welcome Back!" else "Create Account",
-            color = lightPurple,
+            color = primaryColor,
             fontSize = 16.sp
         )
 
@@ -102,16 +124,16 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Name", color = Color.White) },
+                label = { Text("Name", color = Color.Gray) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = purple,
-                    unfocusedBorderColor = lightPurple,
-                    focusedLabelColor = Color.White,
-                    cursorColor = purple,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = primaryColor,
+                    cursorColor = primaryColor,
+                    focusedTextColor = onSurfaceColor,
+                    unfocusedTextColor = onSurfaceColor
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -123,17 +145,17 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email", color = Color.White) },
+            label = { Text("Email", color = Color.Gray) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = purple,
-                unfocusedBorderColor = lightPurple,
-                focusedLabelColor = Color.White,
-                cursorColor = purple,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedBorderColor = primaryColor,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = primaryColor,
+                cursorColor = primaryColor,
+                focusedTextColor = onSurfaceColor,
+                unfocusedTextColor = onSurfaceColor
             ),
             shape = RoundedCornerShape(12.dp)
         )
@@ -144,7 +166,7 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password", color = Color.White) },
+            label = { Text("Password", color = Color.Gray) },
             singleLine = true,
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -152,18 +174,18 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
                 TextButton(onClick = { passwordVisible = !passwordVisible }) {
                     Text(
                         text = if (passwordVisible) "Hide" else "Show",
-                        color = lightPurple
+                        color = primaryColor
                     )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = purple,
-                unfocusedBorderColor = lightPurple,
-                focusedLabelColor = Color.White,
-                cursorColor = purple,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedBorderColor = primaryColor,
+                unfocusedBorderColor = Color.Gray,
+                focusedLabelColor = primaryColor,
+                cursorColor = primaryColor,
+                focusedTextColor = onSurfaceColor,
+                unfocusedTextColor = onSurfaceColor
             ),
             shape = RoundedCornerShape(12.dp)
         )
@@ -175,18 +197,18 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
-                label = { Text("Confirm Password", color = Color.White) },
+                label = { Text("Confirm Password", color = Color.Gray) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = purple,
-                    unfocusedBorderColor = lightPurple,
-                    focusedLabelColor = Color.White,
-                    cursorColor = purple,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = primaryColor,
+                    cursorColor = primaryColor,
+                    focusedTextColor = onSurfaceColor,
+                    unfocusedTextColor = onSurfaceColor
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -216,7 +238,12 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
 
                             override fun onFailure(call: Call<LoginResponse>, t: Throwable) {
                                 isLoading = false
-                                Toast.makeText(context, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
+                                val errorMsg = when (t) {
+                                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
+                                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                                    else -> "Error: ${t.localizedMessage}"
+                                }
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                             }
                         })
                     } else {
@@ -243,7 +270,12 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
 
                             override fun onFailure(call: Call<RegisterResponse>, t: Throwable) {
                                 isLoading = false
-                                Toast.makeText(context, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
+                                val errorMsg = when (t) {
+                                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
+                                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                                    else -> "Error: ${t.localizedMessage}"
+                                }
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                             }
                         })
                     } else {
@@ -257,21 +289,22 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = purple),
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
             shape = RoundedCornerShape(12.dp),
             enabled = !isLoading
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
-                    color = Color.White,
+                    color = Color.Black,
                     modifier = Modifier.size(24.dp)
                 )
             } else {
                 Text(
                     text = if (isLoginMode) "LOGIN" else "REGISTER",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
         }
@@ -291,7 +324,7 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
             TextButton(onClick = { isLoginMode = !isLoginMode }) {
                 Text(
                     text = if (isLoginMode) "Register" else "Login",
-                    color = lightPurple,
+                    color = primaryColor,
                     fontWeight = FontWeight.Bold
                 )
             }

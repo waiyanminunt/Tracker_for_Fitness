@@ -1,8 +1,16 @@
-package com.example.fitnesstracker
+package com.example.fitnesstracker.ui.activities
+
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.ActivitiesResponse
+import com.example.fitnesstracker.data.network.ActivityData
+import com.example.fitnesstracker.utils.BaseActivity
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,18 +59,20 @@ class ProfileActivity : BaseActivity() {
         val userEmail = getUserEmail()
 
         setContent {
-            ProfileScreenContent(
-                userId = userId,
-                userName = userName,
-                userEmail = userEmail,
-                onBack = { finish() },
-                onLogout = {
-                    val intent = Intent(this@ProfileActivity, LoginActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    startActivity(intent)
-                    finish()
-                }
-            )
+            FitnesstrackerTheme {
+                ProfileScreenContent(
+                    userId = userId,
+                    userName = userName,
+                    userEmail = userEmail,
+                    onBack = { finish() },
+                    onLogout = {
+                        val intent = Intent(this@ProfileActivity, LoginActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
+                        finish()
+                    }
+                )
+            }
         }
     }
 }
@@ -74,14 +85,28 @@ fun ProfileScreenContent(
     onBack: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
     var activities by remember { mutableStateOf<List<ActivityData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    val darkPurple = Color(0xFF1A0A2E)
-    val purple = Color(0xFF6B4C9A)
-    val lightPurple = Color(0xFF9B7DD4)
-    val cardBg = Color(0xFF2D1B4E)
-    val accent = Color(0xFFE94560)
+    // State for local user data that can be updated
+    var currentName by remember { mutableStateOf(userName) }
+    var currentEmail by remember { mutableStateOf(userEmail) }
+
+    // Launcher for EditProfileActivity
+    val editProfileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data
+            currentName = data?.getStringExtra("UPDATED_NAME") ?: currentName
+            currentEmail = data?.getStringExtra("UPDATED_EMAIL") ?: currentEmail
+        }
+    }
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     // Fetch activities for stats
     LaunchedEffect(userId) {
@@ -111,7 +136,7 @@ fun ProfileScreenContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(darkPurple)
+            .background(backgroundColor)
     ) {
         // Header with gradient
         Box(
@@ -120,7 +145,7 @@ fun ProfileScreenContent(
                 .height(200.dp)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(purple, darkPurple)
+                        colors = listOf(primaryColor, backgroundColor)
                     )
                 )
         ) {
@@ -148,28 +173,28 @@ fun ProfileScreenContent(
                     modifier = Modifier
                         .size(80.dp)
                         .clip(CircleShape)
-                        .background(accent),
+                        .background(primaryColor),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = userName.take(1).uppercase(),
+                        text = currentName.take(1).uppercase(),
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = userName,
+                    text = currentName,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onBackground
                 )
 
                 Text(
-                    text = userEmail,
+                    text = currentEmail,
                     fontSize = 14.sp,
                     color = Color.Gray
                 )
@@ -187,22 +212,22 @@ fun ProfileScreenContent(
                 title = "Activities",
                 value = totalActivities.toString(),
                 modifier = Modifier.weight(1f),
-                cardBg = cardBg,
-                accent = accent
+                cardBg = surfaceColor,
+                accent = primaryColor
             )
             ProfileStatCard(
                 title = "Calories",
                 value = totalCalories.toString(),
                 modifier = Modifier.weight(1f),
-                cardBg = cardBg,
-                accent = accent
+                cardBg = surfaceColor,
+                accent = primaryColor
             )
             ProfileStatCard(
                 title = "Minutes",
                 value = totalDuration.toString(),
                 modifier = Modifier.weight(1f),
-                cardBg = cardBg,
-                accent = accent
+                cardBg = surfaceColor,
+                accent = primaryColor
             )
         }
 
@@ -219,7 +244,7 @@ fun ProfileScreenContent(
                     text = "Settings",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 
@@ -228,11 +253,15 @@ fun ProfileScreenContent(
                     icon = Icons.Default.Person,
                     title = "Edit Profile",
                     subtitle = "Update your personal information",
-                    cardBg = cardBg,
-                    purple = purple,
-                    lightPurple = lightPurple
+                    cardBg = surfaceColor,
+                    purple = primaryColor,
+                    lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // TODO: Navigate to Edit Profile
+                    val intent = Intent(context, EditProfileActivity::class.java)
+                    intent.putExtra("USER_ID", userId)
+                    intent.putExtra("USER_NAME", currentName)
+                    intent.putExtra("USER_EMAIL", currentEmail)
+                    editProfileLauncher.launch(intent)
                 }
             }
 
@@ -241,11 +270,13 @@ fun ProfileScreenContent(
                     icon = Icons.Default.Notifications,
                     title = "Notifications",
                     subtitle = "Manage your notifications",
-                    cardBg = cardBg,
-                    purple = purple,
-                    lightPurple = lightPurple
+                    cardBg = surfaceColor,
+                    purple = primaryColor,
+                    lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // TODO: Navigate to Notifications
+                    val intent = Intent(context, NotificationsActivity::class.java)
+                    intent.putExtra("USER_ID", userId)
+                    context.startActivity(intent)
                 }
             }
 
@@ -254,9 +285,9 @@ fun ProfileScreenContent(
                     icon = Icons.Default.PrivacyTip,
                     title = "Privacy",
                     subtitle = "Manage your privacy settings",
-                    cardBg = cardBg,
-                    purple = purple,
-                    lightPurple = lightPurple
+                    cardBg = surfaceColor,
+                    purple = primaryColor,
+                    lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
                     // TODO: Navigate to Privacy
                 }
@@ -267,9 +298,9 @@ fun ProfileScreenContent(
                     icon = Icons.Default.Help,
                     title = "Help & Support",
                     subtitle = "Get help and contact support",
-                    cardBg = cardBg,
-                    purple = purple,
-                    lightPurple = lightPurple
+                    cardBg = surfaceColor,
+                    purple = primaryColor,
+                    lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
                     // TODO: Navigate to Help
                 }
@@ -280,9 +311,9 @@ fun ProfileScreenContent(
                     icon = Icons.Default.Info,
                     title = "About",
                     subtitle = "App version and information",
-                    cardBg = cardBg,
-                    purple = purple,
-                    lightPurple = lightPurple
+                    cardBg = surfaceColor,
+                    purple = primaryColor,
+                    lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
                     // TODO: Navigate to About
                 }
@@ -298,20 +329,22 @@ fun ProfileScreenContent(
                     onClick = onLogout,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = accent.copy(alpha = 0.2f)
+                        containerColor = MaterialTheme.colorScheme.errorContainer
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Logout,
                         contentDescription = "Logout",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Logout",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }
@@ -346,7 +379,7 @@ fun ProfileStatCard(
                 text = value,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = accent
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = title,
@@ -403,7 +436,7 @@ fun ProfileMenuItem(
                     text = title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = subtitle,
