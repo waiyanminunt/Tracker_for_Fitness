@@ -9,7 +9,7 @@ object ApiClient {
     // For real device use: http://COMPUTER_IP/fitnesstracker_api/
 
 
-    private const val BASE_URL = "http://192.168.100.97/fitnesstracker_api/"
+    private const val BASE_URL = "http://10.130.254.189/fitnesstracker_api/"
 
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()

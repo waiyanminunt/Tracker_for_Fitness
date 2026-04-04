@@ -289,9 +289,13 @@ fun ProfileScreenContent(
                     purple = primaryColor,
                     lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // TODO: Navigate to Privacy
+                    // Start the new Privacy Activity
+                    val intent = Intent(context, PrivacyActivity::class.java)
+                    context.startActivity(intent)
                 }
             }
+
+
 
             item {
                 ProfileMenuItem(
