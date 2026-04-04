@@ -4,7 +4,7 @@ import com.example.fitnesstracker.data.network.ApiClient
 import com.example.fitnesstracker.data.network.ActivitiesResponse
 import com.example.fitnesstracker.data.network.ActivityData
 import com.example.fitnesstracker.utils.BaseActivity
-import com.example.fitnesstracker.utils.CommonHeader
+
 import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.os.Bundle
@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -135,7 +136,7 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
             }
             Text(
                 text = "Dashboard",
@@ -152,7 +153,7 @@ fun StatisticsScreenContent(userId: Int, onBack: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            TimeFilter.values().forEach { filter ->
+            TimeFilter.entries.forEach { filter ->
                 FilterChip(
                     selected = selectedFilter == filter,
                     onClick = { selectedFilter = filter },

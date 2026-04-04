@@ -8,6 +8,9 @@ import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +20,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -66,6 +72,9 @@ class ProfileActivity : BaseActivity() {
                     userEmail = userEmail,
                     onBack = { finish() },
                     onLogout = {
+                        val sharedPrefs = getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
+                        sharedPrefs.edit().clear().apply()
+                        
                         val intent = Intent(this@ProfileActivity, LoginActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
@@ -149,13 +158,12 @@ fun ProfileScreenContent(
                     )
                 )
         ) {
-            // Back Button
             IconButton(
                 onClick = onBack,
                 modifier = Modifier.align(Alignment.TopStart)
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -289,7 +297,7 @@ fun ProfileScreenContent(
                     purple = primaryColor,
                     lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // Start the new Privacy Activity
+                    // Update: Click listener to trigger the navigation Intent
                     val intent = Intent(context, PrivacyActivity::class.java)
                     context.startActivity(intent)
                 }
@@ -297,16 +305,18 @@ fun ProfileScreenContent(
 
 
 
+
             item {
                 ProfileMenuItem(
-                    icon = Icons.Default.Help,
+                    icon = Icons.AutoMirrored.Filled.Help,
                     title = "Help & Support",
                     subtitle = "Get help and contact support",
                     cardBg = surfaceColor,
                     purple = primaryColor,
                     lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // TODO: Navigate to Help
+                    val intent = Intent(context, HelpSupportActivity::class.java)
+                    context.startActivity(intent)
                 }
             }
 
@@ -319,7 +329,8 @@ fun ProfileScreenContent(
                     purple = primaryColor,
                     lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // TODO: Navigate to About
+                    val intent = Intent(context, AboutAppActivity::class.java)
+                    context.startActivity(intent)
                 }
             }
 
@@ -328,7 +339,6 @@ fun ProfileScreenContent(
             }
 
             item {
-                // Logout Button
                 Button(
                     onClick = onLogout,
                     modifier = Modifier.fillMaxWidth(),
@@ -338,7 +348,7 @@ fun ProfileScreenContent(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Logout,
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
                         contentDescription = "Logout",
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onErrorContainer

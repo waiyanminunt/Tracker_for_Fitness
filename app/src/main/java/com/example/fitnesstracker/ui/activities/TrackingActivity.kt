@@ -7,7 +7,7 @@ import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 import com.example.fitnesstracker.utils.StatBox
 
 import android.Manifest
-import android.content.Intent
+
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Looper
@@ -38,7 +38,7 @@ import retrofit2.Response
 
 class TrackingActivity : ComponentActivity() {
 
-    lateinit var fusedLocationClient: FusedLocationProviderClient
+    internal lateinit var fusedLocationClient: FusedLocationProviderClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -234,7 +234,12 @@ fun TrackingScreen(
 
             override fun onFailure(call: Call<ActivityResponse>, t: Throwable) {
                 isSaving = false
-                Toast.makeText(context, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
+                val errorMsg = when (t) {
+                    is java.net.ConnectException -> "Cannot connect to server. Check your network."
+                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                    else -> "Error: ${t.localizedMessage ?: "Unknown error"}"
+                }
+                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
             }
         })
     }

@@ -80,6 +80,26 @@
             android:exported="false"
             android:theme="@style/Theme.Fitnesstracker" />
 
+        <activity
+            android:name=".ui.activities.PrivacyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Fitnesstracker" />
+
+        <activity
+            android:name=".ui.activities.PrivacyPolicyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Fitnesstracker" />
+
+        <activity
+            android:name=".ui.activities.HelpSupportActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Fitnesstracker" />
+
+        <activity
+            android:name=".ui.activities.AboutAppActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Fitnesstracker" />
+
         <receiver
             android:name=".receivers.WaterReminderReceiver"
             android:exported="false" />

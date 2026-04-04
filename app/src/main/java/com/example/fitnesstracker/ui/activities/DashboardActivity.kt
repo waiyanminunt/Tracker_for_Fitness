@@ -630,34 +630,7 @@ fun EmptyActivitiesState() {
     }
 }
 
-@Composable
-fun StatItemSmall(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    textColor: Color = Color.White
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = textColor,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            color = textColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            color = textColor.copy(alpha = 0.7f),
-            fontSize = 12.sp
-        )
-    }
-}
+
 
 @Composable
 fun ActivityItem(activity: ActivityData) {

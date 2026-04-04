@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
@@ -85,8 +87,8 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
     val context = LocalContext.current
     var selectedActivity by remember { mutableStateOf<String?>(null) }
 
-    // Activities that need GPS tracking
-    val gpsActivities = listOf("Running", "Cycling", "Walking")
+    // Activities that need GPS tracking (Updated to include Hiking)
+    val gpsActivities = listOf("Running", "Cycling", "Walking", "Hiking")
 
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -137,12 +139,12 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
         }
 
         if (selectedActivity == null) {
-            // Activity Selection Screen
+            // Activity Selection Screen (Revamped to Grid)
             ActivitySelectionGrid { activity ->
                 selectedActivity = activity
             }
         } else {
-            // Input Form Screen (for non-GPS activities: Swimming, Weightlifting)
+            // Input Form Screen (for non-GPS activities)
             ActivityInputForm(
                 userId = userId,
                 activityType = selectedActivity!!,
@@ -156,126 +158,125 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
 
 @Composable
 fun ActivitySelectionGrid(onActivitySelected: (String) -> Unit) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
-
+    // New Order & New Activities Added
     val activities = listOf(
-        Triple("Running", Icons.Default.DirectionsRun, MaterialTheme.colorScheme.primary),
         Triple("Cycling", Icons.Default.DirectionsBike, Color(0xFF2196F3)),
+        Triple("Hiking", Icons.Default.Terrain, Color(0xFF4CAF50)),
+        Triple("Yoga", Icons.Default.SelfImprovement, Color(0xFFE91E63)),
         Triple("Swimming", Icons.Default.Pool, Color(0xFF00BCD4)),
-        Triple("Weightlifting", Icons.Default.FitnessCenter, Color(0xFFFF9800)),
-        Triple("Walking", Icons.Default.DirectionsWalk, Color(0xFF9C27B0))
+        Triple("Running", Icons.Default.DirectionsRun, MaterialTheme.colorScheme.primary),
+        Triple("Walking", Icons.Default.DirectionsWalk, Color(0xFF9C27B0)),
+        Triple("Weightlifting", Icons.Default.FitnessCenter, Color(0xFFFF9800))
     )
 
-    // GPS activities
-    val gpsActivities = listOf("Running", "Cycling", "Walking")
+    // GPS activities list for the UI tag
+    val gpsActivities = listOf("Cycling", "Hiking", "Running", "Walking")
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "What did you do today?",
-            color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Running, Cycling, Walking use GPS tracking",
-            color = Color.Gray,
-            fontSize = 12.sp
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        activities.forEach { (name, icon, color) ->
-            ActivityCardLarge(
-                name = name,
-                icon = icon,
-                color = color,
-                hasGps = name in gpsActivities,
-                onClick = { onActivitySelected(name) }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize().padding(bottom = 16.dp)
+        ) {
+            items(activities.size) { index ->
+                val (name, icon, color) = activities[index]
+                ActivityCardGrid(
+                    name = name,
+                    icon = icon,
+                    color = color,
+                    hasGps = name in gpsActivities,
+                    onClick = { onActivitySelected(name) }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun ActivityCardLarge(
+fun ActivityCardGrid(
     name: String,
     icon: ImageVector,
     color: Color,
     hasGps: Boolean,
     onClick: () -> Unit
 ) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    // Create a slightly lighter color for the dark theme popping effect
+    // Alternatively, you can use the Surface color with an elevated shadow
+    val elevatedSurfaceColor = MaterialTheme.colorScheme.surfaceVariant
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor)
+        shape = RoundedCornerShape(24.dp), // Increased corner radius
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp), // Slight shadow for depth
+        colors = CardDefaults.cardColors(containerColor = elevatedSurfaceColor)
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .padding(20.dp)
+                .padding(24.dp)
                 .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
+            // Larger Colorful Icon at the top
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .background(color.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
+                    .size(64.dp)
+                    .background(color.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = name,
                     tint = color,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                if (hasGps) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = "GPS",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "GPS Tracking",
-                            color = Color(0xFF4CAF50),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Select",
-                tint = Color.Gray
+            // Activity Title
+            Text(
+                text = name,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
+
+            // GPS Tracking Subtitle placed directly below if relevant
+            if (hasGps) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = "GPS",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "GPS Tracking",
+                        color = Color(0xFF4CAF50),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            } else {
+                // To maintain grid symmetry, we optionally add an empty space
+                // or just let it adjust dynamically.
+                Spacer(modifier = Modifier.height(20.dp))
+            }
         }
     }
 }

@@ -43,7 +43,20 @@ class LoginActivity : ComponentActivity() {
         setContent {
             FitnesstrackerTheme {
                 LoginScreen(
-                    onLoginSuccess = { user ->
+                    onLoginSuccess = { user, rememberMe ->
+                        val sharedPrefs = getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
+                        if (rememberMe) {
+                            // Save session only when Remember Me is checked
+                            with(sharedPrefs.edit()) {
+                                putInt("USER_ID", user.id)
+                                putString("USER_NAME", user.name)
+                                putString("USER_EMAIL", user.email)
+                                apply()
+                            }
+                        } else {
+                            // Clear any previously saved session
+                            sharedPrefs.edit().clear().apply()
+                        }
                         val intent = Intent(this, DashboardActivity::class.java)
                         intent.putExtra("USER_ID", user.id)
                         intent.putExtra("USER_NAME", user.name)
@@ -58,7 +71,7 @@ class LoginActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginScreen(onLoginSuccess: (User) -> Unit) {
+fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
     val context = LocalContext.current
     var isLoginMode by remember { mutableStateOf(true) }
     var name by remember { mutableStateOf("") }
@@ -67,6 +80,7 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var rememberMe by remember { mutableStateOf(false) }
 
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
@@ -214,7 +228,31 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        // Remember Me checkbox (only shown in Login mode)
+        if (isLoginMode) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = rememberMe,
+                    onCheckedChange = { rememberMe = it },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = primaryColor,
+                        uncheckedColor = Color.Gray,
+                        checkmarkColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+                Text(
+                    text = "Remember Me",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 14.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Login / Register Button
         Button(
@@ -230,7 +268,7 @@ fun LoginScreen(onLoginSuccess: (User) -> Unit) {
                                 val body = response.body()
                                 if (body != null && body.success && body.user != null) {
                                     Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-                                    onLoginSuccess(body.user)
+                                    onLoginSuccess(body.user, rememberMe)
                                 } else {
                                     Toast.makeText(context, body?.message ?: "Login failed", Toast.LENGTH_SHORT).show()
                                 }

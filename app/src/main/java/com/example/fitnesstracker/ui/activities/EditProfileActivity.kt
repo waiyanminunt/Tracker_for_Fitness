@@ -1,5 +1,6 @@
 package com.example.fitnesstracker.ui.activities
 
+
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -27,6 +28,7 @@ import com.example.fitnesstracker.data.network.User
 import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 import com.example.fitnesstracker.utils.BaseActivity
 import com.example.fitnesstracker.utils.CommonHeader
+
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -164,7 +166,12 @@ fun EditProfileScreen(
 
                             override fun onFailure(call: Call<UpdateProfileResponse>, t: Throwable) {
                                 isLoading = false
-                                Toast.makeText(context, "Error: ${t.localizedMessage}", Toast.LENGTH_LONG).show()
+                                val errorMsg = when (t) {
+                                    is java.net.ConnectException -> "Cannot connect to server. Check your network."
+                                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                                    else -> "Error: ${t.localizedMessage ?: "Unknown error"}"
+                                }
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                             }
                         })
                     } else {

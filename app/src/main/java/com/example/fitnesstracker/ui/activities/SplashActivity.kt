@@ -95,7 +95,7 @@ class SplashActivity : ComponentActivity() {
             }
         }
 
-        // Navigate after 3 seconds
+                // Navigate after 3 seconds
         LaunchedEffect(Unit) {
             // Play splash sound (optional, assuming sound exists)
             try {
@@ -106,10 +106,30 @@ class SplashActivity : ComponentActivity() {
             }
 
             kotlinx.coroutines.delay(3000)
-            val intent = Intent(context, LoginActivity::class.java)
-            context.startActivity(intent)
+            
+            // 1. Check SharedPreferences for an existing USER_ID
+            // Make sure the "PrefsName" matches the exact string you use to save the data!
+            val sharedPrefs = context.getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
+            val savedUserId = sharedPrefs.getInt("USER_ID", -1)
+            
+            if (savedUserId != -1) {
+                // Valid USER_ID exists! Bypass Login and navigate directly to Dashboard
+                val intent = Intent(context, DashboardActivity::class.java)
+                intent.putExtra("USER_ID", savedUserId)
+                
+                // (Optional: Retrieve and pass USER_NAME and USER_EMAIL here as well if Dashboard needs them)
+                intent.putExtra("USER_NAME", sharedPrefs.getString("USER_NAME", "User"))
+                intent.putExtra("USER_EMAIL", sharedPrefs.getString("USER_EMAIL", ""))
+                
+                context.startActivity(intent)
+            } else {
+                // No USER_ID exists, proceed to LoginActivity
+                val intent = Intent(context, LoginActivity::class.java)
+                context.startActivity(intent)
+            }
             finish()
         }
+
     }
 
     private fun infiniteTransitionSpec() = infiniteRepeatable<Float>(
