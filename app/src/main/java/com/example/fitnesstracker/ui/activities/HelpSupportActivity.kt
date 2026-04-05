@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -67,7 +67,7 @@ fun HelpSupportScreen(onBackClick: () -> Unit) {
             },
             navigationIcon = {
                 IconButton(onClick = onBackClick) {
-                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(

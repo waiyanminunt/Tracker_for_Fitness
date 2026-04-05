@@ -19,6 +19,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // MapLibre official Maven repository
+        maven { url = uri("https://repo.maplibre.org") }
     }
 }
 

@@ -4,13 +4,11 @@ import com.example.fitnesstracker.data.network.ApiClient
 import com.example.fitnesstracker.data.network.ActivitiesResponse
 import com.example.fitnesstracker.data.network.ActivityData
 import com.example.fitnesstracker.utils.BaseActivity
+import com.example.fitnesstracker.utils.ThemeManager
 import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import retrofit2.Call
@@ -58,23 +57,36 @@ class ProfileActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // USING INHERITED METHODS from BaseActivity
-        // This demonstrates INHERITANCE - we don't need to redefine these methods
         val userId = getUserId()
         val userName = getUserName()
         val userEmail = getUserEmail()
 
+        // Read the saved dark mode preference
+        val sharedPrefs = getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
+        val savedDarkMode = sharedPrefs.getBoolean("isDarkMode", false)
+
         setContent {
-            FitnesstrackerTheme {
+            // isDarkMode is seeded from ThemeManager (already loaded from SharedPrefs
+            // in FitnessApp.onCreate). Using a local remember so the Switch
+            // recomposes this screen instantly without needing an Activity restart.
+            var isDarkMode by remember { mutableStateOf(ThemeManager.isDarkMode.value) }
+
+            FitnesstrackerTheme(darkTheme = isDarkMode) {
                 ProfileScreenContent(
                     userId = userId,
                     userName = userName,
                     userEmail = userEmail,
+                    isDarkMode = isDarkMode,
+                    onDarkModeToggle = { enabled ->
+                        isDarkMode = enabled
+                        // 1) Update the global observable → all other Activities recompose
+                        ThemeManager.isDarkMode.value = enabled
+                        // 2) Persist so the value survives process death
+                        sharedPrefs.edit().putBoolean("isDarkMode", enabled).apply()
+                    },
                     onBack = { finish() },
                     onLogout = {
-                        val sharedPrefs = getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
                         sharedPrefs.edit().clear().apply()
-                        
                         val intent = Intent(this@ProfileActivity, LoginActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
@@ -91,6 +103,8 @@ fun ProfileScreenContent(
     userId: Int,
     userName: String,
     userEmail: String,
+    isDarkMode: Boolean,
+    onDarkModeToggle: (Boolean) -> Unit,
     onBack: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -117,6 +131,9 @@ fun ProfileScreenContent(
     val backgroundColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
 
+    // Dialog visibility state
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+
     // Fetch activities for stats
     LaunchedEffect(userId) {
         ApiClient.apiService.getActivities(userId).enqueue(object : Callback<ActivitiesResponse> {
@@ -133,6 +150,12 @@ fun ProfileScreenContent(
 
             override fun onFailure(call: Call<ActivitiesResponse>, t: Throwable) {
                 isLoading = false
+                val errorMsg = when (t) {
+                    is java.net.ConnectException      -> "Cannot connect to server. Check your network."
+                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
+                    else                              -> "Error: ${t.localizedMessage ?: "Unknown error"}"
+                }
+                android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
             }
         })
     }
@@ -141,6 +164,14 @@ fun ProfileScreenContent(
     val totalActivities = activities.size
     val totalCalories = activities.sumOf { it.calories }
     val totalDuration = activities.sumOf { it.duration }
+
+    // Show Change Password dialog if requested
+    if (showChangePasswordDialog) {
+        ChangePasswordDialog(
+            userId = userId,
+            onDismiss = { showChangePasswordDialog = false }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -297,15 +328,80 @@ fun ProfileScreenContent(
                     purple = primaryColor,
                     lightPurple = MaterialTheme.colorScheme.secondary
                 ) {
-                    // Update: Click listener to trigger the navigation Intent
                     val intent = Intent(context, PrivacyActivity::class.java)
                     context.startActivity(intent)
                 }
             }
 
+            // ── Dark Mode Toggle ──────────────────────────────────────────
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(primaryColor.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DarkMode,
+                                contentDescription = "Dark Mode",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 16.dp)
+                        ) {
+                            Text(
+                                text = "Dark Mode",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isDarkMode) "Dark theme active" else "Light theme active",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = isDarkMode,
+                            onCheckedChange = onDarkModeToggle,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = primaryColor
+                            )
+                        )
+                    }
+                }
+            }
 
-
-
+            // ── Change Password ───────────────────────────────────────────
+            item {
+                ProfileMenuItem(
+                    icon = Icons.Default.Lock,
+                    title = "Change Password",
+                    subtitle = "Update your account password",
+                    cardBg = surfaceColor,
+                    purple = primaryColor,
+                    lightPurple = MaterialTheme.colorScheme.secondary
+                ) {
+                    showChangePasswordDialog = true
+                }
+            }
             item {
                 ProfileMenuItem(
                     icon = Icons.AutoMirrored.Filled.Help,
@@ -466,4 +562,162 @@ fun ProfileMenuItem(
             )
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Change Password Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun ChangePasswordDialog(userId: Int, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    // userId is passed directly from ProfileScreenContent — no SharedPreferences needed
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = null,
+                tint = primaryColor,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Change Password",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = onSurfaceColor
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = currentPassword,
+                    onValueChange = { currentPassword = it },
+                    label = { Text("Current Password", color = Color.Gray) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = primaryColor,
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = primaryColor,
+                        cursorColor = primaryColor,
+                        focusedTextColor = onSurfaceColor,
+                        unfocusedTextColor = onSurfaceColor
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    label = { Text("New Password", color = Color.Gray) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = primaryColor,
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = primaryColor,
+                        cursorColor = primaryColor,
+                        focusedTextColor = onSurfaceColor,
+                        unfocusedTextColor = onSurfaceColor
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        currentPassword.isBlank() || newPassword.isBlank() -> {
+                            android.widget.Toast.makeText(
+                                context, "Please fill in both fields.", android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        newPassword.length < 6 -> {
+                            android.widget.Toast.makeText(
+                                context, "New password must be at least 6 characters.", android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        userId == -1 -> {
+                            android.widget.Toast.makeText(
+                                context, "Session error. Please log in again.", android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        else -> {
+                            isLoading = true
+                            val request = com.example.fitnesstracker.data.network.ChangePasswordRequest(
+                                user_id = userId,
+                                current_password = currentPassword,
+                                new_password = newPassword
+                            )
+                            com.example.fitnesstracker.data.network.ApiClient.apiService
+                                .changePassword(request)
+                                .enqueue(object : retrofit2.Callback<com.example.fitnesstracker.data.network.ChangePasswordResponse> {
+                                    override fun onResponse(
+                                        call: retrofit2.Call<com.example.fitnesstracker.data.network.ChangePasswordResponse>,
+                                        response: retrofit2.Response<com.example.fitnesstracker.data.network.ChangePasswordResponse>
+                                    ) {
+                                        isLoading = false
+                                        val body = response.body()
+                                        if (body != null && body.success) {
+                                            android.widget.Toast.makeText(
+                                                context, "Password updated successfully!", android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                            onDismiss()
+                                        } else {
+                                            android.widget.Toast.makeText(
+                                                context, body?.message ?: "Incorrect current password.", android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+
+                                    override fun onFailure(
+                                        call: retrofit2.Call<com.example.fitnesstracker.data.network.ChangePasswordResponse>,
+                                        t: Throwable
+                                    ) {
+                                        isLoading = false
+                                        val errorMsg = when (t) {
+                                            is java.net.ConnectException -> "Cannot connect to server. Check your network."
+                                            is java.net.SocketTimeoutException -> "Connection timed out."
+                                            else -> "Error: ${t.localizedMessage ?: "Unknown error"}"
+                                        }
+                                        android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                })
+                        }
+                    }
+                },
+                enabled = !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Update", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    )
 }

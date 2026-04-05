@@ -334,7 +334,7 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
-                    color = Color.Black,
+                    color = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
             } else {

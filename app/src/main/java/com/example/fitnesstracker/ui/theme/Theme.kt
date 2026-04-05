@@ -1,7 +1,5 @@
 package com.example.fitnesstracker.ui.theme
-import com.example.fitnesstracker.R
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -12,6 +10,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.example.fitnesstracker.utils.ThemeManager
 
 private val DarkColorScheme = darkColorScheme(
     primary = VitalRed,
@@ -38,10 +37,25 @@ private val LightColorScheme = lightColorScheme(
     onSurface = CharcoalBlack
 )
 
+/**
+ * Global theme function.
+ *
+ * darkTheme resolution priority:
+ *   1. ThemeManager.isDarkMode.value  — process-wide Compose observable state,
+ *      updated instantly by the Dark Mode toggle in ProfileActivity.
+ *      Every Activity observing this will recompose the moment it changes.
+ *   2. isSystemInDarkTheme()          — fallback before user sets a preference.
+ *
+ * NO Activity needs to pass any argument. Just call:
+ *   FitnesstrackerTheme { ... }
+ * and every screen automatically responds to the global toggle.
+ *
+ * ProfileActivity may still pass darkTheme = isDarkMode explicitly for
+ * its own live-toggle behavior — that is also fine and takes priority.
+ */
 @Composable
 fun FitnesstrackerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Set to false to use our custom fitness colors consistently
+    darkTheme: Boolean = ThemeManager.isDarkMode.value,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -50,13 +64,13 @@ fun FitnesstrackerTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
+        shapes = LiquidShapes,
         typography = Typography,
         content = content
     )

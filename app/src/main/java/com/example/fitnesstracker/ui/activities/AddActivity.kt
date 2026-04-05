@@ -21,6 +21,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -74,10 +78,12 @@ class AddActivity : BaseActivity() {
         val userId = getUserId()
 
         setContent {
-            AddActivityScreen(
-                userId = userId,
-                onBack = { finish() }
-            )
+            FitnesstrackerTheme {
+                AddActivityScreen(
+                    userId = userId,
+                    onBack = { finish() }
+                )
+            }
         }
     }
 }
@@ -124,7 +130,7 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
                 }
             }) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.onBackground
                 )
@@ -160,39 +166,46 @@ fun AddActivityScreen(userId: Int, onBack: () -> Unit) {
 fun ActivitySelectionGrid(onActivitySelected: (String) -> Unit) {
     // New Order & New Activities Added
     val activities = listOf(
-        Triple("Cycling", Icons.Default.DirectionsBike, Color(0xFF2196F3)),
+        Triple("Cycling", Icons.AutoMirrored.Filled.DirectionsBike, Color(0xFF2196F3)),
         Triple("Hiking", Icons.Default.Terrain, Color(0xFF4CAF50)),
         Triple("Yoga", Icons.Default.SelfImprovement, Color(0xFFE91E63)),
         Triple("Swimming", Icons.Default.Pool, Color(0xFF00BCD4)),
-        Triple("Running", Icons.Default.DirectionsRun, MaterialTheme.colorScheme.primary),
-        Triple("Walking", Icons.Default.DirectionsWalk, Color(0xFF9C27B0)),
-        Triple("Weightlifting", Icons.Default.FitnessCenter, Color(0xFFFF9800))
+        Triple("Running", Icons.AutoMirrored.Filled.DirectionsRun, MaterialTheme.colorScheme.primary),
+        Triple("Walking", Icons.AutoMirrored.Filled.DirectionsWalk, Color(0xFF9C27B0)),
+        Triple("Weightlifting", Icons.Default.FitnessCenter, Color(0xFFFF9800)),
+        Triple("Football", Icons.Default.SportsSoccer, Color(0xFF2E7D32))
     )
 
     // GPS activities list for the UI tag
     val gpsActivities = listOf("Cycling", "Hiking", "Running", "Walking")
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxSize().padding(bottom = 16.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            items(activities.size) { index ->
-                val (name, icon, color) = activities[index]
-                ActivityCardGrid(
-                    name = name,
-                    icon = icon,
-                    color = color,
-                    hasGps = name in gpsActivities,
-                    onClick = { onActivitySelected(name) }
-                )
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize().padding(bottom = 16.dp)
+            ) {
+                items(activities.size) { index ->
+                    val (name, icon, color) = activities[index]
+                    ActivityCardGrid(
+                        name = name,
+                        icon = icon,
+                        color = color,
+                        hasGps = name in gpsActivities,
+                        onClick = { onActivitySelected(name) }
+                    )
+                }
             }
         }
     }
@@ -302,35 +315,38 @@ fun ActivityInputForm(
     // Calculate calories automatically using BaseWorkout classes
     // Same method name (calculateCalories), different implementation per workout type!
 
+    // Activities that do NOT use distance — hide the field entirely for these
+    val noDistanceActivities = remember { listOf("Yoga", "Weightlifting", "Football") }
+
     val calculatedCalories = remember(duration, distance, activityType) {
-        // Only calculate if duration is provided
         if (duration.isNotEmpty()) {
-            val durationInt = duration.toIntOrNull() ?: 0
+            val durationInt    = duration.toIntOrNull() ?: 0
             val distanceDouble = distance.toDoubleOrNull() ?: 0.0
 
             // POLYMORPHISM IN ACTION:
             // We create different workout objects, but call the SAME method
             when (activityType) {
                 "Swimming" -> {
-                    // Create CardioWorkout for Swimming
                     val workout = CardioWorkout(
-                        id = 0,
-                        name = "Swimming",
-                        durationMinutes = durationInt,
-                        distance = distanceDouble
+                        id = 0, name = "Swimming",
+                        durationMinutes = durationInt, distance = distanceDouble
                     )
-                    workout.calculateCalories() // POLYMORPHISM: Uses MET 7.0
+                    workout.calculateCalories() // MET 7.0
                 }
                 "Weightlifting" -> {
-                    // Create StrengthWorkout for Weightlifting
                     val workout = StrengthWorkout(
-                        id = 0,
-                        name = "Weightlifting",
-                        durationMinutes = durationInt,
-                        sets = 3,    // Default sets
-                        reps = 10    // Default reps
+                        id = 0, name = "Weightlifting",
+                        durationMinutes = durationInt, sets = 3, reps = 10
                     )
-                    workout.calculateCalories() // POLYMORPHISM: Uses sets × reps formula
+                    workout.calculateCalories() // sets × reps formula
+                }
+                "Yoga" -> {
+                    // MET 2.8 × 3.5 × 70 kg / 200 × duration
+                    ((2.8 * 3.5 * 70.0 / 200.0) * durationInt).toInt()
+                }
+                "Football" -> {
+                    // MET 7.0 × 3.5 × 70 kg / 200 × duration
+                    ((7.0 * 3.5 * 70.0 / 200.0) * durationInt).toInt()
                 }
                 else -> 0
             }
@@ -410,29 +426,30 @@ fun ActivityInputForm(
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Distance
-        OutlinedTextField(
-            value = distance,
-            onValueChange = { distance = it },
-            label = { Text("Distance (km) - optional", color = Color.Gray) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = primaryColor,
-                unfocusedBorderColor = Color.Gray,
-                focusedLabelColor = primaryColor,
-                cursorColor = primaryColor,
-                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-            ),
-            shape = RoundedCornerShape(12.dp),
-            leadingIcon = {
-                Icon(Icons.Default.Straighten, contentDescription = null, tint = primaryColor)
-            }
-        )
+        // Distance — hidden entirely for non-distance activities (Yoga, Weightlifting)
+        if (activityType !in noDistanceActivities) {
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = distance,
+                onValueChange = { distance = it },
+                label = { Text("Distance (km) - optional", color = Color.Gray) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = primaryColor,
+                    cursorColor = primaryColor,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                ),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = {
+                    Icon(Icons.Default.Straighten, contentDescription = null, tint = primaryColor)
+                }
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -471,8 +488,10 @@ fun ActivityInputForm(
                         user_id = userId,
                         activity_type = activityType,
                         duration = duration.toInt(),
-                        distance = if (distance.isNotEmpty()) distance.toDouble() else 0.0,
-                        calories = calculatedCalories, // Using POLYMORPHISM-calculated value!
+                        // Force 0 for non-distance activities so dashboard Total Distance stays clean
+                        distance = if (activityType in noDistanceActivities) 0.0
+                                   else if (distance.isNotEmpty()) distance.toDouble() else 0.0,
+                        calories = calculatedCalories,
                         notes = notes
                     )
 
@@ -511,11 +530,11 @@ fun ActivityInputForm(
         ) {
             if (isSaving) {
                 CircularProgressIndicator(
-                    color = Color.Black,
+                    color = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
             } else {
-                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black)
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "SAVE ACTIVITY",

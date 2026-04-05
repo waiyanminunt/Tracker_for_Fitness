@@ -90,4 +90,18 @@ interface ApiService {
 
     @POST("update_profile.php")
     fun updateProfile(@Body request: UpdateProfileRequest): Call<UpdateProfileResponse>
+
+    @POST("change_password.php")
+    fun changePassword(@Body request: ChangePasswordRequest): Call<ChangePasswordResponse>
 }
+
+data class ChangePasswordRequest(
+    val user_id: Int,
+    val current_password: String,
+    val new_password: String
+)
+
+data class ChangePasswordResponse(
+    val success: Boolean,
+    val message: String
+)

@@ -8,6 +8,9 @@ import com.example.fitnesstracker.receivers.*
 import com.example.fitnesstracker.ui.activities.*
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -125,10 +128,10 @@ class CardioWorkout(
 
     // POLYMORPHISM: Different icon for each cardio type
     override val icon: ImageVector = when (name) {
-        "Running" -> Icons.Default.DirectionsRun
-        "Cycling" -> Icons.Default.DirectionsBike
+        "Running" -> Icons.AutoMirrored.Filled.DirectionsRun
+        "Cycling" -> Icons.AutoMirrored.Filled.DirectionsBike
         "Swimming" -> Icons.Default.Pool
-        "Walking" -> Icons.Default.DirectionsWalk
+        "Walking" -> Icons.AutoMirrored.Filled.DirectionsWalk
         else -> Icons.Default.FitnessCenter
     }
 

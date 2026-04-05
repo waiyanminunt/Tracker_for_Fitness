@@ -9,12 +9,19 @@ import com.example.fitnesstracker.utils.WaterTrackerHelper
 import com.example.fitnesstracker.utils.NotificationHelper
 import com.example.fitnesstracker.utils.StatBox
 import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
+import com.example.fitnesstracker.ui.theme.LiquidCardGradient
+import com.example.fitnesstracker.ui.theme.LiquidRedGradient
+import com.example.fitnesstracker.ui.theme.ShapeButton
+import com.example.fitnesstracker.ui.theme.ShapeCard
+import com.example.fitnesstracker.ui.theme.fluidAnimate
+import com.example.fitnesstracker.ui.theme.liquidShadow
 
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,6 +31,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -197,15 +207,17 @@ fun DashboardScreen(
                     context.startActivity(intent)
                 },
                 containerColor = primaryColor,
-                contentColor = Color.Black
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Activity")
             }
         },
         bottomBar = {
             NavigationBar(
-                containerColor = surfaceColor,
-                contentColor = onSurfaceColor
+                // Slightly translucent surface — the glass bar effect
+                containerColor = surfaceColor.copy(alpha = 0.92f),
+                contentColor = onSurfaceColor,
+                tonalElevation = 0.dp
             ) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
@@ -216,7 +228,9 @@ fun DashboardScreen(
                         selectedIconColor = primaryColor,
                         selectedTextColor = primaryColor,
                         unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        unselectedTextColor = Color.Gray,
+                        // Transparent indicator = no opaque pill blocking the icon
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -232,7 +246,8 @@ fun DashboardScreen(
                         selectedIconColor = primaryColor,
                         selectedTextColor = primaryColor,
                         unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -248,7 +263,8 @@ fun DashboardScreen(
                         selectedIconColor = primaryColor,
                         selectedTextColor = primaryColor,
                         unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
                     )
                 )
                 NavigationBarItem(
@@ -266,7 +282,8 @@ fun DashboardScreen(
                         selectedIconColor = primaryColor,
                         selectedTextColor = primaryColor,
                         unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
                     )
                 )
             }
@@ -462,72 +479,84 @@ fun SummaryOverviewCard(
     calorieGoal: Int
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    
-    Card(
+
+    // Liquid hero card: gradient background + ambient shadow + bounce on data change
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor)
+            .padding(horizontal = 16.dp)
+            .liquidShadow(elevation = 16.dp, shape = ShapeCard, color = primaryColor.copy(alpha = 0.22f))
+            .fluidAnimate()
     ) {
-        Row(
-            modifier = Modifier
-                .padding(24.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = ShapeCard,
+            colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
         ) {
-            // Circular Progress on the left
             Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(120.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LiquidCardGradient)
             ) {
-                CircularProgressIndicator(
-                    progress = (totalCalories.toFloat() / calorieGoal).coerceIn(0f, 1f),
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 10.dp,
-                    color = primaryColor,
-                    trackColor = primaryColor.copy(alpha = 0.1f)
-                )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "$totalCalories",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "kcal",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                }
-            }
+                Row(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Circular Progress on the left
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(120.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { (totalCalories.toFloat() / calorieGoal).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 10.dp,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "$totalCalories",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = androidx.compose.ui.graphics.Color.White
+                            )
+                            Text(
+                                text = "kcal",
+                                fontSize = 12.sp,
+                                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
+                            )
+                        }
+                    }
 
-            // Stats on the right
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(start = 24.dp)
-            ) {
-                SummaryStatRow(
-                    label = "Workouts",
-                    value = "$totalSessions",
-                    icon = Icons.Default.FitnessCenter,
-                    color = primaryColor
-                )
-                SummaryStatRow(
-                    label = "Duration",
-                    value = "${totalDuration}m",
-                    icon = Icons.Default.Timer,
-                    color = Color(0xFF4CAF50)
-                )
-                SummaryStatRow(
-                    label = "Goal",
-                    value = "$calorieGoal",
-                    icon = Icons.Default.Flag,
-                    color = Color(0xFFFF9800)
-                )
+                    // Stats on the right
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(start = 24.dp)
+                    ) {
+                        SummaryStatRow(
+                            label = "Workouts",
+                            value = "$totalSessions",
+                            icon = Icons.Default.FitnessCenter,
+                            color = androidx.compose.ui.graphics.Color.White
+                        )
+                        SummaryStatRow(
+                            label = "Duration",
+                            value = "${totalDuration}m",
+                            icon = Icons.Default.Timer,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f)
+                        )
+                        SummaryStatRow(
+                            label = "Goal",
+                            value = "$calorieGoal",
+                            icon = Icons.Default.Flag,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.80f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -570,21 +599,36 @@ fun WellnessQuickCard(
     onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier.clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
+        modifier = modifier
+            .clickable { onClick() }
+            .liquidShadow(elevation = 10.dp, shape = ShapeCard, color = color.copy(alpha = 0.18f))
+            .fluidAnimate(),
+        shape = ShapeCard,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = color,
-                modifier = Modifier.size(24.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(color.copy(alpha = 0.25f), color.copy(alpha = 0.08f))
+                        ),
+                        shape = androidx.compose.foundation.shape.CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = color,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = title,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 color = Color.Gray
             )
             Text(
@@ -595,13 +639,13 @@ fun WellnessQuickCard(
             )
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
-                progress = progress,
+                progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
                 color = color,
-                trackColor = color.copy(alpha = 0.1f)
+                trackColor = color.copy(alpha = 0.12f)
             )
         }
     }
@@ -637,10 +681,20 @@ fun ActivityItem(activity: ActivityData) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val primaryColor = MaterialTheme.colorScheme.primary
 
+    // Glassmorphism card: semi-transparent surface + subtle white border
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor)
+        modifier = Modifier
+            .fillMaxWidth()
+            .fluidAnimate(),
+        shape = ShapeCard,
+        colors = CardDefaults.cardColors(
+            containerColor = surfaceColor.copy(alpha = 0.55f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.18f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -649,18 +703,18 @@ fun ActivityItem(activity: ActivityData) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             val icon = when (activity.activity_type) {
-                "Running" -> Icons.Default.DirectionsRun
-                "Cycling" -> Icons.Default.DirectionsBike
+                "Running" -> Icons.AutoMirrored.Filled.DirectionsRun
+                "Cycling" -> Icons.AutoMirrored.Filled.DirectionsBike
                 "Swimming" -> Icons.Default.Pool
-                "Walking" -> Icons.Default.DirectionsWalk
+                "Walking" -> Icons.AutoMirrored.Filled.DirectionsWalk
                 else -> Icons.Default.FitnessCenter
             }
 
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(primaryColor.copy(alpha = 0.1f)),
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(primaryColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

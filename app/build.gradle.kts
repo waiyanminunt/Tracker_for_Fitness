@@ -56,13 +56,20 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
+    // MapLibre — free, open-source map SDK (no billing required)
+    // v9.6.0 uses com.mapbox.mapboxsdk.* packages consistently (no mixed imports)
+    implementation("org.maplibre.gl:android-sdk:9.6.0")
     // Retrofit for API calls
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
 // Coroutines for async operations
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // Lottie animations for Compose
+    implementation("com.airbnb.android:lottie-compose:6.4.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
