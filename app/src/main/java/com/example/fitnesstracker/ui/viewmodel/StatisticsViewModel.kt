@@ -4,137 +4,186 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.fitnesstracker.data.DataRepository
 import com.example.fitnesstracker.data.network.ActivityData
 import com.example.fitnesstracker.ui.activities.TimeFilter
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 /**
- * StatisticsViewModel — scoped to StatisticsActivity's lifecycle.
+ * StatisticsViewModel — Drives the Statistics screen.
  *
- * Holds the selectedFilter state so it survives configuration changes
- * (screen rotation, font-size change, etc.) without resetting.
+ * Data Integrity Guarantee:
+ *   ZERO mock / fallback / fake data. Every bar in the chart, every number in the
+ *   summary cards, is derived exclusively from real database rows fetched via
+ *   [DataRepository.getActivities].
  *
- * Also centralises all data-bucketing logic that was previously
- * scattered inside the CaloriesBarChart composable, making the
- * composable purely presentational (UI only).
+ *   If a time bucket has no activities, its bar height is 0. If the whole chart
+ *   is empty, all bars are 0. This is the correct behaviour.
  *
- * ─────────────────────────────────────────────────────────────────
- * Why NOT a NavGraph / Application-scoped ViewModel?
- * ─────────────────────────────────────────────────────────────────
- * This app uses Activity-based navigation (each tab launches a new
- * Activity via startActivity()). There is no shared NavHost or
- * NavGraph to scope a cross-screen ViewModel to.
- *
- * An Application-scoped ViewModel would share state across ALL
- * Activities but introduces memory leaks and makes lifecycle
- * reasoning harder — overkill for a single screen preference.
- *
- * The correct solution for this architecture is:
- *  • StatisticsActivity owns a StatisticsViewModel (survives rotation)
- *  • DashboardActivity owns nothing (its filter is local, resets on
- *    re-entry, which is the expected UX for a tab-based app)
- *
- * If you later migrate to a single-Activity + NavHost architecture,
- * simply scope the ViewModel to the NavBackStackEntry or the Activity.
- * ─────────────────────────────────────────────────────────────────
+ * Chart Bug (Fixed):
+ *   The old code had three fallback guards:
+ *     if (buckets.all { it == 0 }) return mockXxx.values
+ *   These triggered whenever the selected time filter (Weekly / Monthly) excluded
+ *   all DB activities, producing fictional bars for months that had no data.
+ *   All three guards have been removed. 0 means 0.
  */
-class StatisticsViewModel : ViewModel() {
+class StatisticsViewModel(private val repository: DataRepository) : ViewModel() {
 
-    // ── Single source of truth for the time filter ───────────────────────────
-    // Using Compose mutableStateOf so Composables reading this state
-    // automatically recompose when it changes — no StateFlow.collectAsState()
-    // boilerplate needed.
+    private val _activities = MutableStateFlow<List<ActivityData>>(emptyList())
+    val activities: StateFlow<List<ActivityData>> = _activities.asStateFlow()
+
+    private val _isLoading  = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _error      = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
     var selectedFilter: TimeFilter by mutableStateOf(TimeFilter.ALL_TIME)
-        private set   // only ViewModel can write; Composables call selectFilter()
+        private set
 
-    /** Called from the UI when the user taps a filter pill. */
     fun selectFilter(filter: TimeFilter) {
         selectedFilter = filter
     }
 
-    // ── Mock data sets (three distinct periods) ──────────────────────────────
-    // These are the illustrative data shown when the user has no real
-    // activities in the selected period. The composable falls back to these.
-
-    data class ChartDataSet(
-        val labels: List<String>,
-        val values: IntArray
-    )
-
-    val mockWeekly = ChartDataSet(
-        labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
-        values = intArrayOf(320, 480, 210, 550, 390, 620, 445)
-    )
-
-    val mockMonthly = ChartDataSet(
-        labels = listOf("W1", "W2", "W3", "W4"),
-        values = intArrayOf(1840, 2650, 980, 3120)
-    )
-
-    val mockAllTime = ChartDataSet(
-        labels = listOf("Jan","Feb","Mar","Apr","May","Jun",
-                        "Jul","Aug","Sep","Oct","Nov","Dec"),
-        values = intArrayOf(4200,3800,5100,4700,6200,5800,
-                            7100,6600,5300,4900,6800,7500)
-    )
-
-    // ── Data-bucketing helpers moved out of the Composable ───────────────────
-    // Each function maps raw ActivityData from the API into the correct
-    // bucket array, then falls back to mock data if the result is all zeros.
-
-    fun computeWeeklyBuckets(activities: List<ActivityData>): IntArray {
-        val buckets = IntArray(7)
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        activities.forEach { act ->
-            try {
-                val d   = sdf.parse(act.created_at) ?: return@forEach
-                val cal = java.util.Calendar.getInstance().apply { time = d }
-                // Sun=1..Sat=7 → remap to Mon=0..Sun=6
-                val idx = (cal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
-                buckets[idx] += act.calories
-            } catch (_: Exception) {}
+    /**
+     * Loads all historical activities for [userId].
+     * Spinner Safety: times out after 5 s; [isLoading] is always reset in finally.
+     */
+    fun fetchActivities(userId: Int) {
+        if (userId <= 0) {
+            _isLoading.value = false
+            _error.value = "Session error: please log in again."
+            return
         }
-        return if (buckets.all { it == 0 }) mockWeekly.values else buckets
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            try {
+                val result = withTimeoutOrNull(5_000L) {
+                    repository.getActivities(userId)
+                }
+                when {
+                    result == null -> {
+                        _activities.value = emptyList()
+                        _error.value = "Statistics load timed out. Check your connection."
+                    }
+                    else -> result
+                        .onSuccess  { response -> _activities.value = response.activities }
+                        .onFailure  { t ->
+                            _activities.value = emptyList()
+                            _error.value = "Could not load statistics: ${t.localizedMessage ?: "Connection error"}"
+                        }
+                }
+            } catch (e: Exception) {
+                _activities.value = emptyList()
+                _error.value = "Unexpected error: ${e.localizedMessage}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
-    fun computeMonthlyBuckets(activities: List<ActivityData>): IntArray {
-        val buckets = IntArray(4)
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        val now = java.util.Calendar.getInstance()
-        activities.forEach { act ->
-            try {
-                val d   = sdf.parse(act.created_at) ?: return@forEach
-                val cal = java.util.Calendar.getInstance().apply { time = d }
-                val daysAgo = ((now.timeInMillis - cal.timeInMillis) / 86_400_000).toInt()
-                val week    = (daysAgo / 7).coerceIn(0, 3)
-                buckets[3 - week] += act.calories
-            } catch (_: Exception) {}
-        }
-        return if (buckets.all { it == 0 }) mockMonthly.values else buckets
-    }
+    // ── Chart data model ───────────────────────────────────────────────────────
 
-    fun computeAllTimeBuckets(activities: List<ActivityData>): IntArray {
-        val buckets = IntArray(12)
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        activities.forEach { act ->
-            try {
-                val d   = sdf.parse(act.created_at) ?: return@forEach
-                val cal = java.util.Calendar.getInstance().apply { time = d }
-                buckets[cal.get(java.util.Calendar.MONTH)] += act.calories
-            } catch (_: Exception) {}
-        }
-        return if (buckets.all { it == 0 }) mockAllTime.values else buckets
-    }
+    /** Holds the labels and calorie-sum values for the bar chart. */
+    data class ChartDataSet(val labels: List<String>, val values: IntArray)
 
     /**
-     * Returns the correct (labels, values) pair for the currently
-     * selected filter — the composable calls this instead of doing
-     * the when() switch itself.
+     * Resolves the correct chart dataset for the [selectedFilter].
+     * All buckets default to 0. If an activity cannot be parsed, it is skipped.
+     * NO mock data is used under any circumstances.
      */
     fun resolveChartData(activities: List<ActivityData>): ChartDataSet {
         return when (selectedFilter) {
-            TimeFilter.WEEKLY   -> ChartDataSet(mockWeekly.labels,  computeWeeklyBuckets(activities))
-            TimeFilter.MONTHLY  -> ChartDataSet(mockMonthly.labels, computeMonthlyBuckets(activities))
-            TimeFilter.ALL_TIME -> ChartDataSet(mockAllTime.labels, computeAllTimeBuckets(activities))
+            TimeFilter.WEEKLY   -> ChartDataSet(WEEKLY_LABELS,    computeWeeklyBuckets(activities))
+            TimeFilter.MONTHLY  -> ChartDataSet(MONTHLY_LABELS,   computeMonthlyBuckets(activities))
+            TimeFilter.ALL_TIME -> ChartDataSet(ALL_TIME_LABELS,   computeAllTimeBuckets(activities))
         }
+    }
+
+    // ── Bucket computation ─────────────────────────────────────────────────────
+
+    /**
+     * Sums calories per day-of-week (Mon=0 … Sun=6) for activities in [activities].
+     * Activities that fall outside the current week will still be included IF
+     * the caller already filtered by WEEKLY before passing the list in.
+     * Chart labels: Mon, Tue, Wed, Thu, Fri, Sat, Sun.
+     */
+    private fun computeWeeklyBuckets(activities: List<ActivityData>): IntArray {
+        val buckets = IntArray(7)
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        activities.forEach { act ->
+            try {
+                val parsedDate = sdf.parse(act.created_at) ?: return@forEach
+                val cal = Calendar.getInstance().apply { time = parsedDate }
+                // DAY_OF_WEEK: Sun=1, Mon=2 … Sat=7 → convert to Mon=0 … Sun=6
+                val idx = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
+                buckets[idx] += act.calories
+            } catch (_: Exception) { /* skip unparseable rows */ }
+        }
+        // Return real zeros — do NOT substitute mock data
+        return buckets
+    }
+
+    /**
+     * Sums calories per ISO week-of-month (W4=most recent … W1=oldest in month).
+     * Activities outside the current month are included only if already filtered.
+     * Chart labels: W1, W2, W3, W4.
+     */
+    private fun computeMonthlyBuckets(activities: List<ActivityData>): IntArray {
+        val buckets = IntArray(4)
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val now = Calendar.getInstance()
+        activities.forEach { act ->
+            try {
+                val parsedDate = sdf.parse(act.created_at) ?: return@forEach
+                val cal = Calendar.getInstance().apply { time = parsedDate }
+                val daysAgo = ((now.timeInMillis - cal.timeInMillis) / 86_400_000L).toInt()
+                val week = (daysAgo / 7).coerceIn(0, 3)
+                buckets[3 - week] += act.calories
+            } catch (_: Exception) { /* skip unparseable rows */ }
+        }
+        // Return real zeros — do NOT substitute mock data
+        return buckets
+    }
+
+    /**
+     * Sums calories per calendar month (Jan=0 … Dec=11).
+     * Only activities from the CURRENT YEAR are counted per bucket, so past-year
+     * data does not inflate the wrong month.
+     * Chart labels: Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec.
+     */
+    private fun computeAllTimeBuckets(activities: List<ActivityData>): IntArray {
+        val buckets = IntArray(12)
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+        activities.forEach { act ->
+            try {
+                val parsedDate = sdf.parse(act.created_at) ?: return@forEach
+                val cal = Calendar.getInstance().apply { time = parsedDate }
+                // Only count activities from the current year to prevent
+                // old data from polluting the current-year chart
+                if (cal.get(Calendar.YEAR) == currentYear) {
+                    buckets[cal.get(Calendar.MONTH)] += act.calories
+                }
+            } catch (_: Exception) { /* skip unparseable rows */ }
+        }
+        // Return real zeros — do NOT substitute mock data
+        return buckets
+    }
+
+    companion object {
+        val WEEKLY_LABELS   = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        val MONTHLY_LABELS  = listOf("W1", "W2", "W3", "W4")
+        val ALL_TIME_LABELS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     }
 }

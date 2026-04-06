@@ -57,6 +57,8 @@ fun PrivacyPolicyScreen(onBackClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(backgroundColor)
     ) {
         TopAppBar(

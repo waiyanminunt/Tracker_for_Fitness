@@ -1,21 +1,5 @@
 package com.example.fitnesstracker.ui.activities
 
-import com.example.fitnesstracker.data.network.ApiClient
-import com.example.fitnesstracker.data.network.ActivitiesResponse
-import com.example.fitnesstracker.data.network.ActivityData
-import com.example.fitnesstracker.utils.BaseActivity
-import com.example.fitnesstracker.utils.ScreenTimeHelper
-import com.example.fitnesstracker.utils.WaterTrackerHelper
-import com.example.fitnesstracker.utils.NotificationHelper
-import com.example.fitnesstracker.utils.StatBox
-import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
-import com.example.fitnesstracker.ui.theme.LiquidCardGradient
-import com.example.fitnesstracker.ui.theme.LiquidRedGradient
-import com.example.fitnesstracker.ui.theme.ShapeButton
-import com.example.fitnesstracker.ui.theme.ShapeCard
-import com.example.fitnesstracker.ui.theme.fluidAnimate
-import com.example.fitnesstracker.ui.theme.liquidShadow
-
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -25,8 +9,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -43,152 +25,129 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 
-// ============================================
-// INHERITANCE EXAMPLE 3: DashboardActivity extends BaseActivity
-// ============================================
-// This class DEMONSTRATES INHERITANCE by:
-// 1. Extending BaseActivity (inherits helper methods)
-// 2. Using inherited methods: getUserId(), getUserName(), getUserEmail()
-//
-// OOP PRINCIPLE: INHERITANCE
-// - Child class (DashboardActivity) extends Parent class (BaseActivity)
-// - Inherits: getUserId(), getUserName(), getUserEmail()
-// - Benefits: Code reuse, consistent data retrieval across all activities
-// ============================================
+import com.example.fitnesstracker.data.DataRepository
+import com.example.fitnesstracker.data.network.ActivityData
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.ui.theme.*
+import com.example.fitnesstracker.ui.viewmodel.DashboardViewModel
+import com.example.fitnesstracker.ui.viewmodel.ViewModelFactory
+import com.example.fitnesstracker.utils.*
 
 class DashboardActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // USING INHERITED METHODS from BaseActivity
         val userId = getUserId()
         val userName = getUserName()
         val userEmail = getUserEmail()
 
+        val repository = DataRepository(ApiClient.apiService)
+        val factory = ViewModelFactory(application, repository)
+
         setContent {
             FitnesstrackerTheme {
+                val viewModel: DashboardViewModel = viewModel(factory = factory)
                 DashboardScreen(
                     userId = userId,
                     userName = userName,
-                    userEmail = userEmail
+                    userEmail = userEmail,
+                    viewModel = viewModel
                 )
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     userId: Int,
     userName: String,
-    userEmail: String
+    userEmail: String,
+    viewModel: DashboardViewModel
 ) {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) }
-
-    var activities by remember { mutableStateOf<List<ActivityData>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var totalCalories by remember { mutableStateOf(0) }
-    var totalDuration by remember { mutableStateOf(0) }
-    var totalSessions by remember { mutableStateOf(0) }
-
-    // Wellness data with safe defaults
-    var screenTime by remember { mutableStateOf(0L) }
-    var pickups by remember { mutableStateOf(0) }
-    var averageUse by remember { mutableStateOf(0) }
-    var continuousUse by remember { mutableStateOf(0) }
-    var waterIntake by remember { mutableStateOf(0) }
-    var waterGoal by remember { mutableStateOf(2500) }
-    var hasScreenTimePermission by remember { mutableStateOf(false) }
-    var isOverLimit by remember { mutableStateOf(false) }
-
-    // Notification Permission for Android 13+
-    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (!isGranted) {
-            Toast.makeText(context, "Notification permission denied. You won't receive reminders.", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            val permission = android.Manifest.permission.POST_NOTIFICATIONS
-            if (androidx.core.content.ContextCompat.checkSelfPermission(context, permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                notificationPermissionLauncher.launch(permission)
-            }
-        }
-    }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     val primaryColor = MaterialTheme.colorScheme.primary
-    val backgroundColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val backgroundColor = MaterialTheme.colorScheme.background
 
-    // Fetch activities on load
-    LaunchedEffect(userId) {
-        ApiClient.apiService.getActivities(userId).enqueue(object : Callback<ActivitiesResponse> {
-            override fun onResponse(call: Call<ActivitiesResponse>, response: Response<ActivitiesResponse>) {
-                isLoading = false
-                val body = response.body()
-                if (body != null && body.success) {
-                    activities = body.activities
-                    totalSessions = activities.size
-                    totalCalories = activities.sumOf { it.calories }
-                    totalDuration = activities.sumOf { it.duration }
-                } else {
-                    val errorMsg = body?.let { "Failed: ${it.activities}" } ?: "Failed to load activities: Unknown error"
-                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-                }
-            }
+    var hasScreenTimePermission by remember { mutableStateOf(false) }
+    var screenTime by remember { mutableLongStateOf(0L) }
+    var isOverLimit by remember { mutableStateOf(false) }
+    var waterIntake by remember { mutableIntStateOf(0) }
+    var waterGoal by remember { mutableIntStateOf(2000) }
 
-            override fun onFailure(call: Call<ActivitiesResponse>, t: Throwable) {
-                isLoading = false
-                val errorMsg = when (t) {
-                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
-                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
-                    else -> "Error: ${t.localizedMessage}"
-                }
-                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                Log.e("Dashboard", "Error: ${t.message}")
+    val activities by viewModel.activities.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val totalCalories by viewModel.totalCalories.collectAsStateWithLifecycle()
+    val totalDuration by viewModel.totalDuration.collectAsStateWithLifecycle()
+    val totalSessions by viewModel.totalSessions.collectAsStateWithLifecycle()
+    val apiError by viewModel.error.collectAsStateWithLifecycle()
+
+    // ── Data loading: cache-aware ON_RESUME ──────────────────────────────────
+    // fetchActivities() respects the ViewModel's 30-second in-memory cache.
+    // Returning from sub-screens (Profile, Notifications, etc.) within that window
+    // is a fast no-op — the ViewModel serves existing data instantly.
+    // Only forceRefresh() bypasses the cache (called after saving a new activity).
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && userId > 0) {
+                viewModel.fetchActivities(userId)   // no-op if cache is fresh
             }
-        })
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Fetch wellness data with error handling
-    LaunchedEffect(Unit) {
-        try {
-            val screenTimeHelper = ScreenTimeHelper(context)
-            val waterTrackerHelper = WaterTrackerHelper(context)
-
-            hasScreenTimePermission = screenTimeHelper.hasUsageStatsPermission()
-
-            if (hasScreenTimePermission) {
-                screenTime = screenTimeHelper.getTodayScreenTime()
-                pickups = screenTimeHelper.getTodayPickups()
-                averageUse = screenTimeHelper.getAverageSessionDuration()
-                continuousUse = screenTimeHelper.getLongestSession()
-                isOverLimit = screenTimeHelper.isOverScreenTimeLimit()
-            }
-
-            waterIntake = waterTrackerHelper.getTodayIntake()
-            waterGoal = waterTrackerHelper.getDailyGoal()
-
-        } catch (e: Exception) {
-            Log.e("Dashboard", "Wellness error: ${e.message}")
+    LaunchedEffect(apiError) {
+        apiError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
         }
     }
 
-    // Time-of-day greeting
+    // Re-read wellness stats (screen time permission + water intake) on every resume.
+    // LaunchedEffect(Unit) only fires ONCE — returning from system Usage Access
+    // Settings would never re-evaluate the permission. ON_RESUME fires every time.
+    val wellnessLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(wellnessLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                try {
+                    val screenTimeHelper  = ScreenTimeHelper(context)
+                    val waterTrackerHelper = WaterTrackerHelper(context)
+
+                    hasScreenTimePermission = screenTimeHelper.hasUsageStatsPermission()
+
+                    if (hasScreenTimePermission) {
+                        screenTime  = screenTimeHelper.getTodayScreenTime()
+                        isOverLimit = screenTimeHelper.isOverScreenTimeLimit()
+                    }
+
+                    waterIntake = waterTrackerHelper.getTodayIntake()
+                    waterGoal   = waterTrackerHelper.getDailyGoal()
+
+                } catch (e: Exception) {
+                    Log.e("Dashboard", "Wellness resume error: ${e.message}")
+                }
+            }
+        }
+        wellnessLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { wellnessLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+
     val greeting = remember {
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
         when (hour) {
@@ -199,6 +158,10 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -214,7 +177,6 @@ fun DashboardScreen(
         },
         bottomBar = {
             NavigationBar(
-                // Slightly translucent surface — the glass bar effect
                 containerColor = surfaceColor.copy(alpha = 0.92f),
                 contentColor = onSurfaceColor,
                 tonalElevation = 0.dp
@@ -229,7 +191,6 @@ fun DashboardScreen(
                         selectedTextColor = primaryColor,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray,
-                        // Transparent indicator = no opaque pill blocking the icon
                         indicatorColor = Color.Transparent
                     )
                 )
@@ -300,7 +261,6 @@ fun DashboardScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -322,10 +282,20 @@ fun DashboardScreen(
                         )
                     }
                     val notificationHelper = remember { NotificationHelper(context) }
-                    val unreadCount = remember { mutableStateOf(notificationHelper.getUnreadCount()) }
+                    val unreadCount = remember { mutableIntStateOf(0) }
 
-                    LaunchedEffect(Unit) {
-                        unreadCount.value = notificationHelper.getUnreadCount()
+                    // Re-read unread count every time Dashboard resumes
+                    // (catches the case where user opened NotificationsActivity and
+                    // markAllAsRead() was called, so the badge clears immediately on return)
+                    val notifLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                    DisposableEffect(notifLifecycleOwner) {
+                        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                                unreadCount.intValue = notificationHelper.getUnreadCount()
+                            }
+                        }
+                        notifLifecycleOwner.lifecycle.addObserver(obs)
+                        onDispose { notifLifecycleOwner.lifecycle.removeObserver(obs) }
                     }
 
                     Box {
@@ -341,7 +311,7 @@ fun DashboardScreen(
                             )
                         }
 
-                        if (unreadCount.value > 0) {
+                        if (unreadCount.intValue > 0) {
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
@@ -351,7 +321,7 @@ fun DashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (unreadCount.value > 9) "9+" else "${unreadCount.value}",
+                                    text = if (unreadCount.intValue > 9) "9+" else "${unreadCount.intValue}",
                                     color = Color.White,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -361,19 +331,15 @@ fun DashboardScreen(
                     }
                 }
 
-                // --- NEW DESIGN: Integrated Dashboard ---
-
-                // 1. Progress Overview Card (Circular Goal)
                 SummaryOverviewCard(
                     totalCalories = totalCalories,
                     totalDuration = totalDuration,
                     totalSessions = totalSessions,
-                    calorieGoal = 2500 // Default goal
+                    calorieGoal = 2500
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 2. Wellness Quick Stats (Horizontal)
                 Text(
                     text = "Daily Wellness",
                     color = onSurfaceColor,
@@ -381,7 +347,7 @@ fun DashboardScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
@@ -398,7 +364,6 @@ fun DashboardScreen(
                         color = Color(0xFF2196F3),
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            // Quick add water logic
                             try {
                                 val waterHelper = WaterTrackerHelper(context)
                                 waterHelper.addWater(250)
@@ -410,20 +375,33 @@ fun DashboardScreen(
                     )
                     WellnessQuickCard(
                         title = "Screen Time",
-                        value = "${screenTime / (1000 * 60 * 60)}h ${(screenTime / (1000 * 60)) % 60}m",
-                        progress = if (screenTime > 0) (screenTime.toFloat() / (7 * 3600 * 1000)).coerceIn(0f, 1f) else 0f,
+                        // Show real usage when permitted; prompt to grant when not
+                        value = if (hasScreenTimePermission)
+                            "${screenTime / (1000L * 60L * 60L)}h ${(screenTime / (1000L * 60L)) % 60L}m"
+                        else
+                            "Tap to Grant",
+                        progress = if (hasScreenTimePermission && screenTime > 0L)
+                            (screenTime.toFloat() / (7f * 3600f * 1000f)).coerceIn(0f, 1f)
+                        else 0f,
                         icon = Icons.Default.Smartphone,
-                        color = if (isOverLimit) Color(0xFFFF5722) else primaryColor,
+                        color = when {
+                            !hasScreenTimePermission -> Color(0xFF9E9E9E)   // grey = no permission
+                            isOverLimit             -> Color(0xFFFF5722)   // orange = over limit
+                            else                    -> primaryColor
+                        },
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            // Navigate to detailed wellness if needed
+                            if (!hasScreenTimePermission) {
+                                // Open system Usage Access settings so user can grant permission
+                                try { ScreenTimeHelper(context).openUsageStatsSettings() }
+                                catch (e: Exception) { Log.e("Dashboard", "Cannot open usage settings", e) }
+                            }
                         }
                     )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 3. Recent Activities
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -447,8 +425,7 @@ fun DashboardScreen(
                 }
 
                 Column(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (isLoading) {
@@ -464,12 +441,16 @@ fun DashboardScreen(
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun SummaryOverviewCard(
@@ -480,7 +461,6 @@ fun SummaryOverviewCard(
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
 
-    // Liquid hero card: gradient background + ambient shadow + bounce on data change
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -491,7 +471,7 @@ fun SummaryOverviewCard(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = ShapeCard,
-            colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             Box(
                 modifier = Modifier
@@ -505,34 +485,32 @@ fun SummaryOverviewCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Circular Progress on the left
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier.size(120.dp)
                     ) {
                         CircularProgressIndicator(
-                            progress = { (totalCalories.toFloat() / calorieGoal).coerceIn(0f, 1f) },
+                            progress = { (totalCalories.toFloat() / calorieGoal.toFloat()).coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxSize(),
                             strokeWidth = 10.dp,
-                            color = androidx.compose.ui.graphics.Color.White,
-                            trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.25f)
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "$totalCalories",
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = androidx.compose.ui.graphics.Color.White
+                                color = Color.White
                             )
                             Text(
                                 text = "kcal",
                                 fontSize = 12.sp,
-                                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
+                                color = Color.White.copy(alpha = 0.75f)
                             )
                         }
                     }
 
-                    // Stats on the right
                     Column(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.padding(start = 24.dp)
@@ -541,19 +519,19 @@ fun SummaryOverviewCard(
                             label = "Workouts",
                             value = "$totalSessions",
                             icon = Icons.Default.FitnessCenter,
-                            color = androidx.compose.ui.graphics.Color.White
+                            color = Color.White
                         )
                         SummaryStatRow(
                             label = "Duration",
                             value = "${totalDuration}m",
                             icon = Icons.Default.Timer,
-                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f)
+                            color = Color.White.copy(alpha = 0.90f)
                         )
                         SummaryStatRow(
                             label = "Goal",
                             value = "$calorieGoal",
                             icon = Icons.Default.Flag,
-                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.80f)
+                            color = Color.White.copy(alpha = 0.80f)
                         )
                     }
                 }
@@ -577,12 +555,12 @@ fun SummaryStatRow(label: String, value: String, icon: ImageVector, color: Color
                 text = value,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = Color.White
             )
             Text(
                 text = label,
                 fontSize = 12.sp,
-                color = Color.Gray
+                color = Color.White.copy(alpha = 0.7f)
             )
         }
     }
@@ -633,9 +611,11 @@ fun WellnessQuickCard(
             )
             Text(
                 text = value,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             )
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
@@ -674,14 +654,11 @@ fun EmptyActivitiesState() {
     }
 }
 
-
-
 @Composable
 fun ActivityItem(activity: ActivityData) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val primaryColor = MaterialTheme.colorScheme.primary
 
-    // Glassmorphism card: semi-transparent surface + subtle white border
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -735,7 +712,8 @@ fun ActivityItem(activity: ActivityData) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${activity.duration} min • ${String.format("%.1f", activity.distance)} km",
+                    // FIXED: Removed invalid escaped quotes " and used proper Kotlin string format
+                    text = "${activity.duration} min • ${"%.1f".format(activity.distance)} km",
                     color = Color.Gray,
                     fontSize = 13.sp
                 )

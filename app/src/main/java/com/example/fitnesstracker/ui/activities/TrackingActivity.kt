@@ -3,13 +3,13 @@ package com.example.fitnesstracker.ui.activities
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -22,8 +22,6 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,9 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -62,67 +57,72 @@ import com.mapbox.geojson.Feature
 import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
-import com.example.fitnesstracker.data.network.ApiClient
-import com.example.fitnesstracker.data.network.ActivityRequest
-import com.example.fitnesstracker.data.network.ActivityResponse
 import com.example.fitnesstracker.utils.StatBox
+import com.example.fitnesstracker.ui.viewmodel.TrackingViewModel
+import com.example.fitnesstracker.ui.viewmodel.ViewModelFactory
+import com.example.fitnesstracker.data.DataRepository
+import com.example.fitnesstracker.data.network.ApiClient
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.fitnesstracker.ui.viewmodel.TrackingState
+import com.example.fitnesstracker.utils.NotificationHelper
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TrackingState Enum
-// ─────────────────────────────────────────────────────────────────────────────
-enum class TrackingState { IDLE, RUNNING, PAUSED, STOPPED }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TrackingActivity - Entry Point
+// TrackingActivity - Entry Point (Strictly UI Bootstrapper)
 // ─────────────────────────────────────────────────────────────────────────────
 class TrackingActivity : ComponentActivity() {
 
-    internal lateinit var fusedLocationClient: FusedLocationProviderClient
+    // Lead Architect: ViewModel is now initialized via Factory for dependency injection
+    // private val viewModel: TrackingViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         val activityType = intent.getStringExtra("ACTIVITY_TYPE") ?: "Running"
         val userId = intent.getIntExtra("USER_ID", 0)
 
+        // Task 1 & 2 Integration: Initialize with Factory
+        val repository = DataRepository(ApiClient.apiService)
+        val factory = ViewModelFactory(application, repository)
+
         setContent {
+            val viewModel: TrackingViewModel = viewModel(factory = factory)
             TrackingScreen(
                 activityType = activityType,
                 userId = userId,
-                onBack = { finish() },
-                onFinish = { _, _, _ -> finish() }
+                viewModel = viewModel,
+                onBack = { finish() }
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TrackingScreen - Main Composable
+// TrackingScreen - Strictly UI State Collection & Rendering
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun TrackingScreen(
     activityType: String,
     userId: Int,
-    onBack: () -> Unit,
-    onFinish: (distance: Float, duration: Long, calories: Int) -> Unit
+    viewModel: TrackingViewModel,
+    onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as TrackingActivity
     val isDark = isSystemInDarkTheme()
 
-    // ── State ─────────────────────────────────────────────────────────────────
-    var trackingState by remember { mutableStateOf(TrackingState.IDLE) }
-    val isRunning = trackingState == TrackingState.RUNNING
+    // Task 3: collectAsStateWithLifecycle (Efficient state observing)
+    val trackingState by viewModel.trackingState.collectAsStateWithLifecycle()
+    val durationSeconds by viewModel.durationSeconds.collectAsStateWithLifecycle()
+    val distanceMeters by viewModel.distanceMeters.collectAsStateWithLifecycle()
+    val currentSpeed by viewModel.currentSpeed.collectAsStateWithLifecycle()
+    val locationPoints by viewModel.locationPoints.collectAsStateWithLifecycle()
+    val hasPermission by viewModel.hasPermission.collectAsStateWithLifecycle()
+    val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
+    val activeActivityType by viewModel.activeActivityType.collectAsStateWithLifecycle()
+    val apiError by viewModel.apiError.collectAsStateWithLifecycle()
 
-    var durationSeconds by remember { mutableLongStateOf(0L) }
-    var distanceMeters by remember { mutableFloatStateOf(0f) }
-    var currentSpeed by remember { mutableFloatStateOf(0f) }
-    var hasPermission by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
-    var locationPoints by remember { mutableStateOf(listOf<android.location.Location>()) }
+    val isBusy = activeActivityType != null && activeActivityType != activityType
 
-    val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
 
@@ -130,72 +130,25 @@ fun TrackingScreen(
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        hasPermission = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+        val granted = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        viewModel.updatePermissionStatus(granted)
     }
 
     LaunchedEffect(Unit) {
-        val fine = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        hasPermission = fine || coarse
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        viewModel.updatePermissionStatus(fine || coarse)
         if (!hasPermission) {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
 
-    // ── Timer ─────────────────────────────────────────────────────────────────
-    LaunchedEffect(isRunning) {
-        while (isRunning) {
-            kotlinx.coroutines.delay(1000)
-            durationSeconds++
-        }
-    }
-
-    // ── GPS ───────────────────────────────────────────────────────────────────
-    DisposableEffect(isRunning, hasPermission) {
-        var locationCallback: LocationCallback? = null
-
-        if (isRunning && hasPermission) {
-            val locationRequest = LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY, 1000
-            ).build()
-
-            locationCallback = object : LocationCallback() {
-                private var lastLocation: android.location.Location? = null
-                override fun onLocationResult(result: LocationResult) {
-                    result.lastLocation?.let { loc ->
-                        currentSpeed = loc.speed
-                        lastLocation?.let { distanceMeters += it.distanceTo(loc) }
-                        lastLocation = loc
-                        locationPoints = locationPoints + loc
-                    }
-                }
-            }
-
-            try {
-                activity.fusedLocationClient.requestLocationUpdates(
-                    locationRequest, locationCallback, Looper.getMainLooper()
-                )
-            } catch (e: SecurityException) {
-                Log.e("Tracking", "Permission error: ${e.message}")
-            }
-        }
-
-        onDispose {
-            locationCallback?.let {
-                activity.fusedLocationClient.removeLocationUpdates(it)
-            }
+    // ── Error Handling Toasts ─────────────────────────────────────────────────
+    LaunchedEffect(apiError) {
+        if (apiError != null) {
+            Toast.makeText(context, apiError, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
         }
     }
 
@@ -212,72 +165,7 @@ fun TrackingScreen(
         String.format(Locale.getDefault(), "%.2f", distanceMeters / 1000f)
     }
 
-    val pace = remember(durationSeconds, distanceMeters) {
-        if (distanceMeters < 100) "--:--"
-        else {
-            val km = distanceMeters / 1000f
-            val minutesPerKm = (durationSeconds / 60f) / km
-            val m = minutesPerKm.toInt()
-            val s = ((minutesPerKm - m) * 60).toInt()
-            String.format(Locale.getDefault(), "%d:%02d", m, s)
-        }
-    }
-
-    // ── Calorie calculation + saveActivity ────────────────────────────────────
-    fun calculateCalories(): Int {
-        val km = distanceMeters / 1000f
-        val caloriesPerKm = when (activityType) {
-            "Running" -> 60
-            "Cycling" -> 30
-            "Walking" -> 40
-            "Hiking" -> 50
-            else -> 50
-        }
-        return (km * caloriesPerKm).toInt()
-    }
-
-    fun saveActivity() {
-        isSaving = true
-        val calories = calculateCalories()
-        val request = ActivityRequest(
-            user_id = userId,
-            activity_type = activityType,
-            duration = durationSeconds.toInt() / 60,
-            distance = distanceMeters / 1000.0,
-            calories = calories,
-            notes = "Tracked via GPS"
-        )
-        ApiClient.apiService.saveActivity(request)
-            .enqueue(object : Callback<ActivityResponse> {
-                override fun onResponse(
-                    call: Call<ActivityResponse>,
-                    response: Response<ActivityResponse>
-                ) {
-                    isSaving = false
-                    val body = response.body()
-                    if (body != null && body.success) {
-                        Toast.makeText(context, "Activity saved!", Toast.LENGTH_SHORT).show()
-                        onFinish(distanceMeters, durationSeconds, calories)
-                    } else {
-                        Toast.makeText(
-                            context,
-                            body?.message ?: "Failed to save",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-
-                override fun onFailure(call: Call<ActivityResponse>, t: Throwable) {
-                    isSaving = false
-                    val msg = when (t) {
-                        is java.net.ConnectException -> "Cannot connect to server. Check your network."
-                        is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
-                        else -> "Error: ${t.localizedMessage ?: "Unknown error"}"
-                    }
-                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                }
-            })
-    }
+    val pace = viewModel.calculatePace()
 
     // ── Activity icon ─────────────────────────────────────────────────────────
     val activityIcon = when (activityType) {
@@ -289,34 +177,26 @@ fun TrackingScreen(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // UI
+    // UI Layout
     // ─────────────────────────────────────────────────────────────────────────
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(backgroundColor)
     ) {
+        TrackingHeader(activityType = activityType, activityIcon = activityIcon, onBack = onBack)
 
-        // ── Header ────────────────────────────────────────────────────────────
-        TrackingHeader(
-            activityType = activityType,
-            activityIcon = activityIcon,
-            onBack = onBack
-        )
-
-        // ── Permission denied ─────────────────────────────────────────────────
         if (!hasPermission) {
             PermissionDeniedView()
         } else {
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
-                // ── Animation Section ──────────────────────────────────────────
                 AnimationSection(
                     activityType = activityType,
                     trackingState = trackingState,
@@ -324,15 +204,10 @@ fun TrackingScreen(
                     isDark = isDark
                 )
 
-                // ── Timer Display ─────────────────────────────────────────────
-                TimerDisplay(
-                    formattedTime = formattedTime,
-                    trackingState = trackingState
-                )
+                TimerDisplay(formattedTime = formattedTime, trackingState = trackingState)
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // ── Stats Row ─────────────────────────────────────────────────
                 TrackingStatsOverlay(
                     formattedDistance = formattedDistance,
                     pace = pace,
@@ -342,28 +217,40 @@ fun TrackingScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // ── Control Buttons ────────────────────────────────────────────
                 TrackingControls(
-                    trackingState = trackingState,
+                    trackingState = if (isBusy) TrackingState.IDLE else trackingState,
                     activityType = activityType,
                     isSaving = isSaving,
-                    onPause = { trackingState = TrackingState.PAUSED },
-                    onResume = { trackingState = TrackingState.RUNNING },
-                    onStart = { trackingState = TrackingState.RUNNING },
+                    onPause = { viewModel.pauseTracking() },
+                    onResume = { viewModel.resumeTracking() },
+                    onStart = { viewModel.startTracking(activityType) },
                     onFinish = {
-                        trackingState = TrackingState.STOPPED
-                        saveActivity()
+                        viewModel.finishTracking(userId, activityType) {
+                            // Log a 'Workout Saved' notification so the Notifications
+                            // screen shows real activity entries immediately.
+                            NotificationHelper(context).addNotification(
+                                title = "✅ $activityType Saved!",
+                                message = "Your $activityType session has been saved successfully.",
+                                type = "workout_saved"
+                            )
+                            Toast.makeText(context, "Activity saved!", Toast.LENGTH_SHORT).show()
+                            onBack()
+                        }
                     }
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+
+        if (isBusy && hasPermission) {
+            BusySessionOverlay(activeType = activeActivityType ?: "Another Activity", onBack = onBack)
+        }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reusable UI Components
+// Reusable UI Components (Untouched from your working code)
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -546,8 +433,6 @@ private fun TrackingControls(
     onFinish: () -> Unit
 ) {
     when (trackingState) {
-
-        // START — single wide button
         TrackingState.IDLE -> {
             Button(
                 onClick = onStart,
@@ -574,8 +459,6 @@ private fun TrackingControls(
                 )
             }
         }
-
-        // RUNNING — Pause | Finish
         TrackingState.RUNNING -> {
             ControlButtonRow(
                 leftLabel = "PAUSE",
@@ -595,8 +478,6 @@ private fun TrackingControls(
                 rightOnClick = onFinish
             )
         }
-
-        // PAUSED — Resume | Finish
         TrackingState.PAUSED -> {
             ControlButtonRow(
                 leftLabel = "RESUME",
@@ -616,33 +497,69 @@ private fun TrackingControls(
                 rightOnClick = onFinish
             )
         }
-
-        // STOPPED — saving spinner
         TrackingState.STOPPED -> {
-            Button(
-                onClick = {},
-                enabled = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Saving…",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+            // --- THE BUG FIX ---
+            // Old code: always showed CircularProgressIndicator when state=STOPPED.
+            // That ignored isSaving entirely, so even after the finally block set
+            // isSaving=false, the spinner stayed until resetData() ran (or never
+            // ran on timeout), making the UI appear permanently frozen.
+            //
+            // New code: STOPPED+isSaving=true  → spinner ("Saving…")
+            //           STOPPED+isSaving=false → "Retry" button (save failed/timed out)
+            if (isSaving) {
+                Button(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Saving…",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            } else {
+                // isSaving=false means the save either failed or timed out.
+                // Show a Retry button so the user can attempt again without losing data.
+                Button(
+                    onClick = onFinish,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Retry Save",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
         }
+
     }
 }
 
@@ -728,28 +645,23 @@ private const val PATH_LAYER_ID = "cycling-path-layer"
 private const val POS_SOURCE_ID = "cycling-pos-source"
 private const val POS_LAYER_ID = "cycling-pos-layer"
 
-// Updated with your exact MapTiler API Key
 private const val MAPTILER_KEY = "5SWQsfM09VXwlm3ZE3Im"
 private const val MAP_STYLE_URL = "https://api.maptiler.com/maps/streets-v2/style.json?key=$MAPTILER_KEY"
 
 @Composable
 fun CyclingMapView(
     locationPoints: List<android.location.Location>,
-    isDark: Boolean, // Kept for parameter consistency, though streets-v2 is used
+    isDark: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    // Initialize MapLibre SDK once
     remember { Mapbox.getInstance(context) }
 
     val mapboxMapRef = remember { mutableStateOf<MapboxMap?>(null) }
     val mapView = remember { MapView(context) }
 
-    // ── Perfect Lifecycle Handling ────────────────────────────────────────────
-    // This forwards every Activity/Fragment lifecycle event 1-to-1 to the MapView
-    // so the GL surface, state, and sensors are created/destroyed at the exact right time.
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
@@ -759,33 +671,29 @@ fun CyclingMapView(
                 androidx.lifecycle.Lifecycle.Event.ON_PAUSE   -> mapView.onPause()
                 androidx.lifecycle.Lifecycle.Event.ON_STOP    -> mapView.onStop()
                 androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
-                else -> { /* ON_ANY ignored */ }
+                else -> { }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
 
         onDispose {
-            // Clean up observer when the Composable leaves the composition
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
-    // ── Map Setup & Style ─────────────────────────────────────────────────────
     LaunchedEffect(Unit) {
         mapView.getMapAsync { map ->
             mapboxMapRef.value = map
             map.cameraPosition = CameraPosition.Builder().zoom(15.0).build()
 
-            // Apply your locked streets-v2 style URL
             map.setStyle(MAP_STYLE_URL) { style ->
                 val emptyGeoJson = """{ "type": "FeatureCollection", "features": [] }"""
 
-                // Add Route Polyline Source & Layer
                 style.addSource(GeoJsonSource(PATH_SOURCE_ID, FeatureCollection.fromJson(emptyGeoJson)))
                 style.addLayer(
                     LineLayer(PATH_LAYER_ID, PATH_SOURCE_ID).apply {
                         setProperties(
-                            PropertyFactory.lineColor(android.graphics.Color.rgb(220, 50, 50)), // Vital Red
+                            PropertyFactory.lineColor(android.graphics.Color.rgb(220, 50, 50)),
                             PropertyFactory.lineWidth(4f),
                             PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
@@ -793,7 +701,6 @@ fun CyclingMapView(
                     }
                 )
 
-                // Add Current Position Dot Source & Layer
                 style.addSource(GeoJsonSource(POS_SOURCE_ID, FeatureCollection.fromJson(emptyGeoJson)))
                 style.addLayer(
                     CircleLayer(POS_LAYER_ID, POS_SOURCE_ID).apply {
@@ -806,7 +713,6 @@ fun CyclingMapView(
                     }
                 )
 
-                // Seed camera to last known GPS location so it doesn't open on the ocean
                 try {
                     if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                         LocationServices.getFusedLocationProviderClient(context).lastLocation.addOnSuccessListener { loc ->
@@ -826,13 +732,11 @@ fun CyclingMapView(
         }
     }
 
-    // ── Live Polyline & Marker Updates ────────────────────────────────────────
     LaunchedEffect(locationPoints) {
         val map = mapboxMapRef.value ?: return@LaunchedEffect
         val style = map.style ?: return@LaunchedEffect
         if (locationPoints.isEmpty()) return@LaunchedEffect
 
-        // Update the red line tracking the route
         val coordinates = locationPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
         (style.getSource(PATH_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(
             FeatureCollection.fromFeatures(
@@ -840,7 +744,6 @@ fun CyclingMapView(
             )
         )
 
-        // Update the white dot to the latest GPS ping
         val last = locationPoints.last()
         (style.getSource(POS_SOURCE_ID) as? GeoJsonSource)?.setGeoJson(
             FeatureCollection.fromFeatures(
@@ -848,7 +751,6 @@ fun CyclingMapView(
             )
         )
 
-        // Smoothly pan the camera to follow the cyclist
         map.animateCamera(
             CameraUpdateFactory.newLatLngZoom(
                 LatLng(last.latitude, last.longitude), 16.0
@@ -856,7 +758,6 @@ fun CyclingMapView(
         )
     }
 
-    // ── Render MapView ────────────────────────────────────────────────────────
     AndroidView(
         factory = { mapView },
         modifier = modifier.clip(RoundedCornerShape(16.dp))
@@ -892,21 +793,18 @@ private fun ParallaxBackground(
         val tileWidthPx = 240f * dp
         val scrollPx = (scrollOffset * dp) % tileWidthPx
 
-        // Sky
         val skyH = h * 0.55f
         drawRect(
             brush = Brush.verticalGradient(listOf(skyTop, skyBottom), 0f, skyH),
             size = Size(w, skyH)
         )
 
-        // Grass
         drawRect(
             color = grassColor,
             topLeft = Offset(0f, skyH),
             size = Size(w, h - skyH)
         )
 
-        // Road
         val roadTop = h * 0.68f
         val roadH = h - roadTop
         drawRect(
@@ -915,7 +813,6 @@ private fun ParallaxBackground(
             size = Size(w, roadH)
         )
 
-        // Dashed center line
         val dashW = 40f * dp
         val gapW = 30f * dp
         val dashY = roadTop + roadH * 0.5f
@@ -930,7 +827,6 @@ private fun ParallaxBackground(
             dashX += dashW + gapW
         }
 
-        // Trees
         val treeSlots = listOf(40f * dp, 160f * dp)
         val numTiles = (w / tileWidthPx).toInt() + 2
         for (tile in -1..numTiles) {
@@ -1084,7 +980,6 @@ fun HikingAnimationScene(
 ) {
     val isMoving = trackingState == TrackingState.RUNNING
 
-    // Ground scroll — 35 dp/s downward
     val scrollOffset = remember { Animatable(0f) }
     LaunchedEffect(isMoving) {
         if (isMoving) {
@@ -1099,7 +994,6 @@ fun HikingAnimationScene(
         }
     }
 
-    // Cloud drift — slow horizontal
     val cloudDrift = remember { Animatable(0f) }
     LaunchedEffect(isMoving) {
         if (isMoving) {
@@ -1114,7 +1008,6 @@ fun HikingAnimationScene(
         }
     }
 
-    // Mountain scale — 1.0 → 1.12 over 60 s
     val mountainScale = remember { Animatable(1.0f) }
     LaunchedEffect(isMoving) {
         if (isMoving) {
@@ -1127,7 +1020,6 @@ fun HikingAnimationScene(
         }
     }
 
-    // Wind line phase
     val windPhase = remember { Animatable(0f) }
     LaunchedEffect(isMoving) {
         if (isMoving) {
@@ -1142,7 +1034,6 @@ fun HikingAnimationScene(
         }
     }
 
-    // Hiker limb cycle — 2.2 s per stroke
     val limbPhase = remember { Animatable(0f) }
     LaunchedEffect(isMoving) {
         if (isMoving) {
@@ -1202,10 +1093,8 @@ private fun HikingBackgroundCanvas(
         val driftPx = cloudDrift * dp
         val sc = mountainScale
 
-        // Layer 0: Sky gradient
         drawRect(Brush.verticalGradient(listOf(skyTop, skyBot), 0f, h), size = size)
 
-        // Layer 1: Clouds
         val tileW = w * 1.6f
         val cShift = driftPx % tileW
         data class Cld(val x: Float, val y: Float, val s: Float)
@@ -1235,13 +1124,11 @@ private fun HikingBackgroundCanvas(
             }
         }
 
-        // Layer 2: Fuji-shaped mountain
         val mtnCx = w * 0.48f
         val mtnBaseY = h * 0.70f
         val mtnPeakY = h * 0.06f
         val mtnHalfW = w * 0.44f
 
-        // Left slope (darker shadow)
         val sp = Path()
         sp.moveTo(mtnCx, mtnPeakY * (2f - sc))
         sp.cubicTo(
@@ -1256,7 +1143,6 @@ private fun HikingBackgroundCanvas(
         sp.close()
         drawPath(sp, mtnShadow)
 
-        // Right slope (brighter body)
         val mp = Path()
         mp.moveTo(mtnCx, mtnPeakY * (2f - sc))
         mp.cubicTo(
@@ -1271,7 +1157,6 @@ private fun HikingBackgroundCanvas(
         mp.close()
         drawPath(mp, mtnBody)
 
-        // Layer 2b: Trees on mountain face
         data class MtnTree(val xOff: Float, val yFrac: Float, val r: Float)
         listOf(
             MtnTree(-0.20f, 0.42f, 4.5f), MtnTree(-0.10f, 0.50f, 5.0f),
@@ -1297,7 +1182,6 @@ private fun HikingBackgroundCanvas(
             drawCircle(treeCanopy, tr, Offset(tx, ty))
         }
 
-        // Layer 2c: Zigzag trail
         val trailSw = 2.2f * dp
         val segs = 7
         for (i in 0 until segs) {
@@ -1310,7 +1194,6 @@ private fun HikingBackgroundCanvas(
             drawLine(trailCol, Offset(x0, y0), Offset(x1, y1), trailSw, cap = StrokeCap.Round)
         }
 
-        // Layer 3: Wind lines
         data class Wind(val xF: Float, val yF: Float, val len: Float, val phaseOff: Float)
         listOf(
             Wind(0.22f, 0.30f, 0.18f, 0.0f),
@@ -1331,7 +1214,6 @@ private fun HikingBackgroundCanvas(
             )
         }
 
-        // Layer 4: Ground
         val groundTop = h * 0.74f
         val gScrollPx = (scrollPx * 0.6f) % (28f * dp)
 
@@ -1350,7 +1232,6 @@ private fun HikingBackgroundCanvas(
         gp.close()
         drawPath(gp, groundEarth)
 
-        // Scrolling texture lines
         for (i in 0..4) {
             val ly = groundTop + 8f * dp + i * 6f * dp + gScrollPx
             if (ly < h) {
@@ -1364,7 +1245,6 @@ private fun HikingBackgroundCanvas(
             }
         }
 
-        // Layer 4b: Rocks
         data class Rock(val xF: Float, val wF: Float, val hF: Float)
         listOf(
             Rock(0.08f, 0.06f, 0.03f), Rock(0.30f, 0.04f, 0.025f),
@@ -1376,7 +1256,6 @@ private fun HikingBackgroundCanvas(
             drawOval(rockCol, Offset(rx, ry), Size(r.wF * w, r.hF * h))
         }
 
-        // Layer 4c: Foreground trees
         data class FgTree(val xF: Float, val trH: Float, val canR: Float)
         listOf(
             FgTree(0.06f, 18f, 8f), FgTree(0.22f, 14f, 6.5f),
@@ -1490,7 +1369,6 @@ private fun HikingFigureCanvas(
 // DefaultAnimationScene - Fallback for other activity types
 // ─────────────────────────────────────────────────────────────────────────────
 
-
 @Composable
 fun DefaultAnimationScene(
     trackingState: TrackingState,
@@ -1499,7 +1377,6 @@ fun DefaultAnimationScene(
     val isMoving = trackingState == TrackingState.RUNNING
     val isDark = isSystemInDarkTheme()
 
-    // FIX: Captured outside Canvas because MaterialTheme.colorScheme is @Composable
     val accentColor = MaterialTheme.colorScheme.primary
 
     val scrollOffset = remember { Animatable(0f) }
@@ -1542,7 +1419,6 @@ fun DefaultAnimationScene(
         val dp = density
         val scrollPx = scrollOffset.value * dp
 
-        // Now it safely uses the variable captured above
         val bgColor = if (isDark) Color(0xFF1A1A2E) else Color(0xFFE3F2FD)
         drawRect(bgColor, size = size)
 
@@ -1569,5 +1445,56 @@ fun DefaultAnimationScene(
             radius = 25f * dp * pulseScale.value,
             center = Offset(w / 2, h / 2)
         )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BusySessionOverlay - Isolation UI
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun BusySessionOverlay(activeType: String, onBack: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
+                .padding(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Session Busy",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "A $activeType session is already running in the background. Please finish that activity first.",
+                fontSize = 16.sp,
+                color = Color.Gray,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Go Back", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }

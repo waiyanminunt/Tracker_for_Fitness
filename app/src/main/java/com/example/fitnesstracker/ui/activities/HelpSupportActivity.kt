@@ -55,6 +55,8 @@ fun HelpSupportScreen(onBackClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(backgroundColor)
     ) {
         TopAppBar(
@@ -124,8 +126,8 @@ fun HelpSupportScreen(onBackClick: () -> Unit) {
                         .fillMaxWidth()
                         .clickable {
                             val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:support@fitnesstracker.com")
-                                putExtra(Intent.EXTRA_SUBJECT, "Fitness Tracker Support Request")
+                                data = Uri.parse("mailto:support@unt.com")
+                                putExtra(Intent.EXTRA_SUBJECT, "Support Request")
                             }
                             // Trigger the email client intent
                             context.startActivity(Intent.createChooser(intent, "Send Email"))

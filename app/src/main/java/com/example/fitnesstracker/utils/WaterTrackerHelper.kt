@@ -1,11 +1,4 @@
 package com.example.fitnesstracker.utils
-import com.example.fitnesstracker.R
-
-import com.example.fitnesstracker.data.network.*
-import com.example.fitnesstracker.data.models.*
-import com.example.fitnesstracker.utils.*
-import com.example.fitnesstracker.receivers.*
-import com.example.fitnesstracker.ui.activities.*
 
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -15,10 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import com.example.fitnesstracker.receivers.WaterReminderReceiver
 import java.util.Calendar
 
 /**
- * Helper class to track water intake and manage reminders
+ * Helper class to track water intake and manage reminders.
  */
 class WaterTrackerHelper(private val context: Context) {
 
@@ -27,88 +21,57 @@ class WaterTrackerHelper(private val context: Context) {
     }
 
     companion object {
-        const val CHANNEL_ID = "water_reminder"
-        const val DAILY_GOAL_ML = 2500
-        const val REMINDER_INTERVAL_HOURS = 2
-        const val NOTIFICATION_ID = 1001
+        const val CHANNEL_ID               = "water_reminder"
+        const val DAILY_GOAL_ML            = 2500
+        const val REMINDER_INTERVAL_HOURS  = 2
+        const val NOTIFICATION_ID          = 1001
     }
 
-    /**
-     * Get today's water intake in milliliters
-     */
+    /** Get today's water intake in milliliters. */
     fun getTodayIntake(): Int {
-        val todayKey = getTodayKey()
-        return prefs.getInt(todayKey, 0)
+        return prefs.getInt(getTodayKey(), 0)
     }
 
-    /**
-     * Add water to today's intake
-     */
+    /** Add water to today's intake. */
     fun addWater(amountMl: Int) {
-        val todayKey = getTodayKey()
-        val current = prefs.getInt(todayKey, 0)
-        prefs.edit().putInt(todayKey, current + amountMl).apply()
+        val current = prefs.getInt(getTodayKey(), 0)
+        prefs.edit().putInt(getTodayKey(), current + amountMl).apply()
     }
 
-    /**
-     * Reset today's water intake
-     */
+    /** Reset today's water intake. */
     fun resetTodayIntake() {
-        val todayKey = getTodayKey()
-        prefs.edit().putInt(todayKey, 0).apply()
+        prefs.edit().putInt(getTodayKey(), 0).apply()
     }
 
-    /**
-     * Get progress percentage (0-100)
-     */
+    /** Get progress percentage (0-100). */
     fun getProgressPercentage(): Int {
-        val intake = getTodayIntake()
-        return ((intake.toFloat() / DAILY_GOAL_ML) * 100).toInt().coerceIn(0, 100)
+        return ((getTodayIntake().toFloat() / DAILY_GOAL_ML) * 100)
+            .toInt().coerceIn(0, 100)
     }
 
-    /**
-     * Get remaining water to drink
-     */
+    /** Get remaining water to drink. */
     fun getRemaining(): Int {
-        val intake = getTodayIntake()
-        return (DAILY_GOAL_ML - intake).coerceAtLeast(0)
+        return (DAILY_GOAL_ML - getTodayIntake()).coerceAtLeast(0)
     }
 
-    /**
-     * Check if daily goal is reached
-     */
-    fun isGoalReached(): Boolean {
-        return getTodayIntake() >= DAILY_GOAL_ML
-    }
+    /** Returns true if the daily goal has been reached. */
+    fun isGoalReached(): Boolean = getTodayIntake() >= DAILY_GOAL_ML
 
-    /**
-     * Set daily goal
-     */
+    /** Set daily goal in ml. */
     fun setDailyGoal(goalMl: Int) {
         prefs.edit().putInt("daily_goal", goalMl).apply()
     }
 
-    /**
-     * Get daily goal
-     */
-    fun getDailyGoal(): Int {
-        return prefs.getInt("daily_goal", DAILY_GOAL_ML)
-    }
+    /** Get daily goal in ml. */
+    fun getDailyGoal(): Int = prefs.getInt("daily_goal", DAILY_GOAL_ML)
 
-    /**
-     * Get today's key for SharedPreferences
-     */
+    /** Key unique to today's date for SharedPreferences isolation. */
     private fun getTodayKey(): String {
-        val calendar = Calendar.getInstance()
-        val year = calendar.get(Calendar.YEAR)
-        val month = calendar.get(Calendar.MONTH)
-        val day = calendar.get(Calendar.DAY_OF_MONTH)
-        return "water_$year$month$day"
+        val cal = Calendar.getInstance()
+        return "water_${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}_${cal.get(Calendar.DAY_OF_MONTH)}"
     }
 
-    /**
-     * Create notification channel for water reminders
-     */
+    /** Creates the notification channel required on Android O+. */
     fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -119,35 +82,33 @@ class WaterTrackerHelper(private val context: Context) {
                 description = "Notifications to remind you to drink water"
                 enableVibration(true)
             }
-
-            val notificationManager = context.getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
+            val nm = context.getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(channel)
         }
     }
 
     /**
-     * Schedule water reminder notifications
+     * Schedules exact water reminder alarms at fixed times throughout the day.
+     * Safe to call multiple times — AlarmManager replaces existing alarms via
+     * FLAG_UPDATE_CURRENT.
      */
     fun scheduleReminders() {
         createNotificationChannel()
-
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
+        val alarmManager  = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val reminderHours = listOf(8, 10, 12, 14, 16, 18, 20, 22)
 
         for (hour in reminderHours) {
-            val calendar = Calendar.getInstance().apply {
+            val triggerTime = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, hour)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-
+                set(Calendar.MINUTE,      0)
+                set(Calendar.SECOND,      0)
                 if (timeInMillis <= System.currentTimeMillis()) {
                     add(Calendar.DAY_OF_MONTH, 1)
                 }
-            }
+            }.timeInMillis
 
-            val intent = Intent(context, WaterReminderReceiver::class.java)
-            val pendingIntent = PendingIntent.getBroadcast(
+            val intent: Intent = Intent(context, WaterReminderReceiver::class.java)
+            val pendingIntent: PendingIntent = PendingIntent.getBroadcast(
                 context,
                 hour,
                 intent,
@@ -157,7 +118,7 @@ class WaterTrackerHelper(private val context: Context) {
             try {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
+                    triggerTime,
                     pendingIntent
                 )
             } catch (e: SecurityException) {
@@ -166,16 +127,14 @@ class WaterTrackerHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Cancel all water reminders
-     */
+    /** Cancels all scheduled water reminder alarms. */
     fun cancelReminders() {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager  = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val reminderHours = listOf(8, 10, 12, 14, 16, 18, 20, 22)
 
         for (hour in reminderHours) {
-            val intent = Intent(context, WaterReminderReceiver::class.java)
-            val pendingIntent = PendingIntent.getBroadcast(
+            val intent: Intent = Intent(context, WaterReminderReceiver::class.java)
+            val pendingIntent: PendingIntent = PendingIntent.getBroadcast(
                 context,
                 hour,
                 intent,

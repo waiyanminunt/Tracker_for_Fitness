@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+        Theme.Fitnesstracker — Bridge theme for Jetpack Compose apps.
 
-    <style name="Theme.Fitnesstracker" parent="android:Theme.Material.Light.NoActionBar" />
+        Key design decisions:
+          1. Parent = Theme.MaterialComponents.DayNight.NoActionBar
+             Supports DayNight variants, no default ActionBar, Material3 compatible.
+          2. windowTranslucentStatus / windowTranslucentNavigation = false
+             We want full transparency, not translucency (avoids the semi-opaque scrim).
+          3. statusBarColor + navigationBarColor = transparent
+             Compose draws its own content behind the bars.
+             FitnesstrackerTheme's SideEffect controls icon tint (light/dark) separately.
+          4. windowDrawsSystemBarBackgrounds = true
+             Required for statusBarColor/navigationBarColor to take effect.
+             The Window paints directly; no system default overlay.
+    -->
+    <style name="Theme.Fitnesstracker" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>

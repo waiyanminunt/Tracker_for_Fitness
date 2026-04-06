@@ -48,6 +48,8 @@ fun PrivacyScreenContent(onBackClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(backgroundColor)
     ) {
         TopAppBar(

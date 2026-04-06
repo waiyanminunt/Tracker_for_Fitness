@@ -1,14 +1,5 @@
 package com.example.fitnesstracker.ui.activities
 
-import com.example.fitnesstracker.data.network.ApiClient
-import com.example.fitnesstracker.data.network.LoginRequest
-import com.example.fitnesstracker.data.network.LoginResponse
-import com.example.fitnesstracker.data.network.RegisterRequest
-import com.example.fitnesstracker.data.network.RegisterResponse
-import com.example.fitnesstracker.data.network.User
-import com.example.fitnesstracker.R
-import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
-
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -33,29 +24,39 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.fitnesstracker.R
+import com.example.fitnesstracker.data.DataRepository
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.User
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
+import com.example.fitnesstracker.ui.viewmodel.LoginViewModel
+import com.example.fitnesstracker.ui.viewmodel.ViewModelFactory
 
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        val repository = DataRepository(ApiClient.apiService)
+        val factory = ViewModelFactory(application, repository)
+
         setContent {
             FitnesstrackerTheme {
+                val viewModel: LoginViewModel = viewModel(factory = factory)
                 LoginScreen(
+                    viewModel = viewModel,
                     onLoginSuccess = { user, rememberMe ->
                         val sharedPrefs = getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
-                        if (rememberMe) {
-                            // Save session only when Remember Me is checked
-                            with(sharedPrefs.edit()) {
-                                putInt("USER_ID", user.id)
-                                putString("USER_NAME", user.name)
-                                putString("USER_EMAIL", user.email)
-                                apply()
-                            }
-                        } else {
-                            // Clear any previously saved session
-                            sharedPrefs.edit().clear().apply()
+                        // Always persist session identity so all screens can read USER_ID.
+                        // The rememberMe flag only controls whether auto-login is active on
+                        // the next cold-start (used by SplashActivity).
+                        with(sharedPrefs.edit()) {
+                            putInt("USER_ID", user.id)
+                            putString("USER_NAME", user.name)
+                            putString("USER_EMAIL", user.email)
+                            putBoolean("rememberMe", rememberMe) // auto-login gate
+                            apply()
                         }
                         val intent = Intent(this, DashboardActivity::class.java)
                         intent.putExtra("USER_ID", user.id)
@@ -71,7 +72,10 @@ class LoginActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
+fun LoginScreen(
+    viewModel: LoginViewModel,
+    onLoginSuccess: (User, Boolean) -> Unit
+) {
     val context = LocalContext.current
     var isLoginMode by remember { mutableStateOf(true) }
     var name by remember { mutableStateOf("") }
@@ -79,25 +83,64 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
     var rememberMe by remember { mutableStateOf(false) }
 
+    // Task 3: Observe state from ViewModel
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val loginResult by viewModel.loginResult.collectAsStateWithLifecycle()
+    val registerResult by viewModel.registerResult.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+
     val primaryColor = MaterialTheme.colorScheme.primary
-    val secondaryColor = MaterialTheme.colorScheme.secondary
     val backgroundColor = MaterialTheme.colorScheme.background
-    val surfaceColor = MaterialTheme.colorScheme.surface
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
 
+    // Handle Results
+    LaunchedEffect(loginResult) {
+        loginResult?.onSuccess { response ->
+            if (response.success && response.user != null) {
+                Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+                onLoginSuccess(response.user, rememberMe)
+            } else {
+                Toast.makeText(context, response.message ?: "Login failed", Toast.LENGTH_SHORT).show()
+            }
+            viewModel.clearResults()
+        }
+    }
+
+    LaunchedEffect(registerResult) {
+        registerResult?.onSuccess { response ->
+            if (response.success) {
+                Toast.makeText(context, "Registration successful! Please login.", Toast.LENGTH_SHORT).show()
+                isLoginMode = true
+                password = ""
+                confirmPassword = ""
+            } else {
+                Toast.makeText(context, response.message ?: "Registration failed", Toast.LENGTH_SHORT).show()
+            }
+            viewModel.clearResults()
+        }
+    }
+
+    LaunchedEffect(error) {
+        error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearResults()
+        }
+    }
+
+    // Task 4: Root with Padding
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(backgroundColor)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Logo
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -114,7 +157,6 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // App Name
         Text(
             text = "Fitness Tracker",
             color = onSurfaceColor,
@@ -124,7 +166,6 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Subtitle
         Text(
             text = if (isLoginMode) "Welcome Back!" else "Create Account",
             color = primaryColor,
@@ -133,7 +174,6 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Name field (only for register)
         if (!isLoginMode) {
             OutlinedTextField(
                 value = name,
@@ -151,11 +191,9 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
-
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Email Field
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
@@ -176,7 +214,6 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password Field
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
@@ -204,10 +241,8 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
             shape = RoundedCornerShape(12.dp)
         )
 
-        // Confirm Password (only for Register mode)
         if (!isLoginMode) {
             Spacer(modifier = Modifier.height(16.dp))
-
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
@@ -228,7 +263,6 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
             )
         }
 
-        // Remember Me checkbox (only shown in Login mode)
         if (isLoginMode) {
             Spacer(modifier = Modifier.height(12.dp))
             Row(
@@ -254,68 +288,17 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Login / Register Button
         Button(
             onClick = {
                 if (isLoginMode) {
-                    // Login
                     if (email.isNotEmpty() && password.isNotEmpty()) {
-                        isLoading = true
-                        val request = LoginRequest(email, password)
-                        ApiClient.apiService.login(request).enqueue(object : Callback<LoginResponse> {
-                            override fun onResponse(call: Call<LoginResponse>, response: Response<LoginResponse>) {
-                                isLoading = false
-                                val body = response.body()
-                                if (body != null && body.success && body.user != null) {
-                                    Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
-                                    onLoginSuccess(body.user, rememberMe)
-                                } else {
-                                    Toast.makeText(context, body?.message ?: "Login failed", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-
-                            override fun onFailure(call: Call<LoginResponse>, t: Throwable) {
-                                isLoading = false
-                                val errorMsg = when (t) {
-                                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
-                                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
-                                    else -> "Error: ${t.localizedMessage}"
-                                }
-                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                            }
-                        })
+                        viewModel.login(email, password)
                     } else {
                         Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    // Register
                     if (name.isNotEmpty() && email.isNotEmpty() && password.isNotEmpty() && password == confirmPassword) {
-                        isLoading = true
-                        val request = RegisterRequest(name, email, password)
-                        ApiClient.apiService.register(request).enqueue(object : Callback<RegisterResponse> {
-                            override fun onResponse(call: Call<RegisterResponse>, response: Response<RegisterResponse>) {
-                                isLoading = false
-                                val body = response.body()
-                                if (body != null && body.success) {
-                                    Toast.makeText(context, "Registration successful! Please login.", Toast.LENGTH_SHORT).show()
-                                    isLoginMode = true
-                                    password = ""
-                                    confirmPassword = ""
-                                } else {
-                                    Toast.makeText(context, body?.message ?: "Registration failed", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-
-                            override fun onFailure(call: Call<RegisterResponse>, t: Throwable) {
-                                isLoading = false
-                                val errorMsg = when (t) {
-                                    is java.net.ConnectException -> "Cannot connect to server. Check your network and IP address."
-                                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
-                                    else -> "Error: ${t.localizedMessage}"
-                                }
-                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                            }
-                        })
+                        viewModel.register(name, email, password)
                     } else {
                         if (password != confirmPassword) {
                             Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
@@ -349,7 +332,6 @@ fun LoginScreen(onLoginSuccess: (User, Boolean) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Toggle Login / Register
         Row(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically

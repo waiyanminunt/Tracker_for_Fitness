@@ -1,14 +1,10 @@
 package com.example.fitnesstracker.ui.activities
 
-import com.example.fitnesstracker.data.network.ApiClient
-import com.example.fitnesstracker.data.network.ActivitiesResponse
-import com.example.fitnesstracker.data.network.ActivityData
-import com.example.fitnesstracker.utils.BaseActivity
-import com.example.fitnesstracker.utils.ThemeManager
-import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
-
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,59 +31,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.fitnesstracker.data.DataRepository
+import com.example.fitnesstracker.data.network.ApiClient
+import com.example.fitnesstracker.data.network.ChangePasswordRequest
+import com.example.fitnesstracker.data.network.User
+import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
+import com.example.fitnesstracker.ui.viewmodel.FitnessViewModel
+import com.example.fitnesstracker.ui.viewmodel.StatisticsViewModel
+import com.example.fitnesstracker.ui.viewmodel.ViewModelFactory
+import com.example.fitnesstracker.utils.ThemeManager
 
-// ============================================
-// INHERITANCE EXAMPLE 2: ProfileActivity extends BaseActivity
-// ============================================
-// This class DEMONSTRATES INHERITANCE by:
-// 1. Extending BaseActivity (inherits helper methods)
-// 2. Using inherited methods: getUserId(), getUserName(), getUserEmail()
-//
-// OOP PRINCIPLE: INHERITANCE
-// - Child class (ProfileActivity) extends Parent class (BaseActivity)
-// - Inherits: getUserId(), getUserName(), getUserEmail()
-// - Benefits: Code reuse, no need to repeat intent.getIntExtra() code
-// ============================================
-
-class ProfileActivity : BaseActivity() {
+class ProfileActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val userId = getUserId()
-        val userName = getUserName()
-        val userEmail = getUserEmail()
-
-        // Read the saved dark mode preference
         val sharedPrefs = getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
-        val savedDarkMode = sharedPrefs.getBoolean("isDarkMode", false)
+        val userId = sharedPrefs.getInt("USER_ID", 0)
+
+        val repository = DataRepository(ApiClient.apiService)
+        val factory = ViewModelFactory(application, repository)
 
         setContent {
-            // isDarkMode is seeded from ThemeManager (already loaded from SharedPrefs
-            // in FitnessApp.onCreate). Using a local remember so the Switch
-            // recomposes this screen instantly without needing an Activity restart.
             var isDarkMode by remember { mutableStateOf(ThemeManager.isDarkMode.value) }
-
             FitnesstrackerTheme(darkTheme = isDarkMode) {
+                val fitnessViewModel: FitnessViewModel = viewModel(factory = factory)
+                val statsViewModel: StatisticsViewModel = viewModel(factory = factory)
+                
                 ProfileScreenContent(
                     userId = userId,
-                    userName = userName,
-                    userEmail = userEmail,
+                    fitnessViewModel = fitnessViewModel,
+                    statsViewModel = statsViewModel,
                     isDarkMode = isDarkMode,
                     onDarkModeToggle = { enabled ->
                         isDarkMode = enabled
-                        // 1) Update the global observable → all other Activities recompose
                         ThemeManager.isDarkMode.value = enabled
-                        // 2) Persist so the value survives process death
                         sharedPrefs.edit().putBoolean("isDarkMode", enabled).apply()
                     },
                     onBack = { finish() },
                     onLogout = {
                         sharedPrefs.edit().clear().apply()
-                        val intent = Intent(this@ProfileActivity, LoginActivity::class.java)
+                        val intent = Intent(this, LoginActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
                         finish()
@@ -101,74 +87,41 @@ class ProfileActivity : BaseActivity() {
 @Composable
 fun ProfileScreenContent(
     userId: Int,
-    userName: String,
-    userEmail: String,
+    fitnessViewModel: FitnessViewModel,
+    statsViewModel: StatisticsViewModel,
     isDarkMode: Boolean,
     onDarkModeToggle: (Boolean) -> Unit,
     onBack: () -> Unit,
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
-    var activities by remember { mutableStateOf<List<ActivityData>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    val userProfile by fitnessViewModel.userProfile.collectAsStateWithLifecycle()
+    val activities by statsViewModel.activities.collectAsStateWithLifecycle()
+    val isLoading by fitnessViewModel.isLoading.collectAsStateWithLifecycle()
 
-    // State for local user data that can be updated
-    var currentName by remember { mutableStateOf(userName) }
-    var currentEmail by remember { mutableStateOf(userEmail) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
 
-    // Launcher for EditProfileActivity
     val editProfileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val data = result.data
-            currentName = data?.getStringExtra("UPDATED_NAME") ?: currentName
-            currentEmail = data?.getStringExtra("UPDATED_EMAIL") ?: currentEmail
+            fitnessViewModel.fetchProfile(userId)
         }
+    }
+
+    LaunchedEffect(userId) {
+        fitnessViewModel.fetchProfile(userId)
+        statsViewModel.fetchActivities(userId)
     }
 
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundColor = MaterialTheme.colorScheme.background
     val surfaceColor = MaterialTheme.colorScheme.surface
 
-    // Dialog visibility state
-    var showChangePasswordDialog by remember { mutableStateOf(false) }
-
-    // Fetch activities for stats
-    LaunchedEffect(userId) {
-        ApiClient.apiService.getActivities(userId).enqueue(object : Callback<ActivitiesResponse> {
-            override fun onResponse(
-                call: Call<ActivitiesResponse>,
-                response: Response<ActivitiesResponse>
-            ) {
-                isLoading = false
-                val body = response.body()
-                if (body != null && body.success) {
-                    activities = body.activities
-                }
-            }
-
-            override fun onFailure(call: Call<ActivitiesResponse>, t: Throwable) {
-                isLoading = false
-                val errorMsg = when (t) {
-                    is java.net.ConnectException      -> "Cannot connect to server. Check your network."
-                    is java.net.SocketTimeoutException -> "Connection timed out. Server might be slow."
-                    else                              -> "Error: ${t.localizedMessage ?: "Unknown error"}"
-                }
-                android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
-            }
-        })
-    }
-
-    // Calculate stats
-    val totalActivities = activities.size
-    val totalCalories = activities.sumOf { it.calories }
-    val totalDuration = activities.sumOf { it.duration }
-
-    // Show Change Password dialog if requested
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
             userId = userId,
+            viewModel = fitnessViewModel,
             onDismiss = { showChangePasswordDialog = false }
         )
     }
@@ -176,547 +129,358 @@ fun ProfileScreenContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(backgroundColor)
     ) {
-        // Header with gradient
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(200.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(primaryColor, backgroundColor)
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(primaryColor, backgroundColor)))
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.TopStart)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
-                )
+            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
             }
 
-            // Profile Info
             Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(top = 32.dp),
+                modifier = Modifier.align(Alignment.Center).padding(top = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Avatar
                 Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(primaryColor),
+                    modifier = Modifier.size(80.dp).clip(CircleShape).background(primaryColor),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = currentName.take(1).uppercase(),
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(36.dp),
+                            strokeWidth = 3.dp
+                        )
+                    } else {
+                        // Show first initial on success, '@' on failure
+                        Text(
+                            text = userProfile?.name?.take(1)?.uppercase() ?: "@",
+                            fontSize = 32.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
-
                 Spacer(modifier = Modifier.height(12.dp))
-
+                // Do NOT use 'Loading...' as a null-fallback — distinguish states explicitly
                 Text(
-                    text = currentName,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = when {
+                        isLoading -> "Fetching profile…"
+                        userProfile != null -> userProfile!!.name
+                        else -> "Unknown User"
+                    },
+                    fontSize = 24.sp, fontWeight = FontWeight.Bold
                 )
-
                 Text(
-                    text = currentEmail,
-                    fontSize = 14.sp,
-                    color = Color.Gray
+                    text = userProfile?.email ?: "",
+                    fontSize = 14.sp, color = Color.Gray
                 )
             }
         }
 
-        // Stats Row
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ProfileStatCard(
-                title = "Activities",
-                value = totalActivities.toString(),
-                modifier = Modifier.weight(1f),
-                cardBg = surfaceColor,
-                accent = primaryColor
-            )
-            ProfileStatCard(
-                title = "Calories",
-                value = totalCalories.toString(),
-                modifier = Modifier.weight(1f),
-                cardBg = surfaceColor,
-                accent = primaryColor
-            )
-            ProfileStatCard(
-                title = "Minutes",
-                value = totalDuration.toString(),
-                modifier = Modifier.weight(1f),
-                cardBg = surfaceColor,
-                accent = primaryColor
-            )
+            ProfileStatCard("Activities", activities.size.toString(), Modifier.weight(1f), surfaceColor, primaryColor)
+            ProfileStatCard("Calories", activities.sumOf { it.calories }.toString(), Modifier.weight(1f), surfaceColor, primaryColor)
+            ProfileStatCard("Minutes", activities.sumOf { it.duration }.toString(), Modifier.weight(1f), surfaceColor, primaryColor)
         }
 
-        // Menu Items
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Settings",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
 
+            // ── Account ──────────────────────────────────────────────────────
+            item { SettingsSectionHeader("Account") }
             item {
                 ProfileMenuItem(
                     icon = Icons.Default.Person,
                     title = "Edit Profile",
                     subtitle = "Update your personal information",
                     cardBg = surfaceColor,
-                    purple = primaryColor,
-                    lightPurple = MaterialTheme.colorScheme.secondary
+                    purple = primaryColor
                 ) {
                     val intent = Intent(context, EditProfileActivity::class.java)
                     intent.putExtra("USER_ID", userId)
-                    intent.putExtra("USER_NAME", currentName)
-                    intent.putExtra("USER_EMAIL", currentEmail)
+                    intent.putExtra("USER_NAME", userProfile?.name)
+                    intent.putExtra("USER_EMAIL", userProfile?.email)
                     editProfileLauncher.launch(intent)
                 }
             }
-
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.Notifications,
-                    title = "Notifications",
-                    subtitle = "Manage your notifications",
-                    cardBg = surfaceColor,
-                    purple = primaryColor,
-                    lightPurple = MaterialTheme.colorScheme.secondary
-                ) {
-                    val intent = Intent(context, NotificationsActivity::class.java)
-                    intent.putExtra("USER_ID", userId)
-                    context.startActivity(intent)
-                }
-            }
-
-            item {
-                ProfileMenuItem(
-                    icon = Icons.Default.PrivacyTip,
-                    title = "Privacy",
-                    subtitle = "Manage your privacy settings",
-                    cardBg = surfaceColor,
-                    purple = primaryColor,
-                    lightPurple = MaterialTheme.colorScheme.secondary
-                ) {
-                    val intent = Intent(context, PrivacyActivity::class.java)
-                    context.startActivity(intent)
-                }
-            }
-
-            // ── Dark Mode Toggle ──────────────────────────────────────────
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(primaryColor.copy(alpha = 0.3f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DarkMode,
-                                contentDescription = "Dark Mode",
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 16.dp)
-                        ) {
-                            Text(
-                                text = "Dark Mode",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isDarkMode) "Dark theme active" else "Light theme active",
-                                fontSize = 12.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = isDarkMode,
-                            onCheckedChange = onDarkModeToggle,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = primaryColor
-                            )
-                        )
-                    }
-                }
-            }
-
-            // ── Change Password ───────────────────────────────────────────
             item {
                 ProfileMenuItem(
                     icon = Icons.Default.Lock,
                     title = "Change Password",
                     subtitle = "Update your account password",
                     cardBg = surfaceColor,
-                    purple = primaryColor,
-                    lightPurple = MaterialTheme.colorScheme.secondary
+                    purple = primaryColor
+                ) { showChangePasswordDialog = true }
+            }
+
+            // ── Preferences ──────────────────────────────────────────────────
+            item { SettingsSectionHeader("Preferences") }
+            item {
+                // Dark Mode — keeps its unique Switch layout
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    showChangePasswordDialog = true
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(primaryColor.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.DarkMode,
+                                contentDescription = "Dark Mode",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                            Text("Dark Mode", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                if (isDarkMode) "Dark theme active" else "Light theme active",
+                                fontSize = 12.sp, color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = isDarkMode,
+                            onCheckedChange = onDarkModeToggle,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = primaryColor
+                            )
+                        )
+                    }
                 }
+            }
+            item {
+                ProfileMenuItem(
+                    icon = Icons.Default.Notifications,
+                    title = "Notifications",
+                    subtitle = "Manage your activity alerts",
+                    cardBg = surfaceColor,
+                    purple = primaryColor
+                ) { context.startActivity(Intent(context, NotificationsActivity::class.java)) }
+            }
+
+            // ── Privacy & Security ───────────────────────────────────────────
+            item { SettingsSectionHeader("Privacy & Security") }
+            item {
+                ProfileMenuItem(
+                    icon = Icons.Default.Security,
+                    title = "Privacy Management",
+                    subtitle = "Location, data sharing & permissions",
+                    cardBg = surfaceColor,
+                    purple = primaryColor
+                ) { context.startActivity(Intent(context, PrivacyActivity::class.java)) }
+            }
+
+            // ── Support & Contact ────────────────────────────────────────────
+            item { SettingsSectionHeader("Support & Contact") }
+            item {
+                // Contact Us — opens email client with pre-filled address
+                ContactUsCard(surfaceColor = surfaceColor, primaryColor = primaryColor)
             }
             item {
                 ProfileMenuItem(
                     icon = Icons.AutoMirrored.Filled.Help,
-                    title = "Help & Support",
-                    subtitle = "Get help and contact support",
+                    title = "Help Center",
+                    subtitle = "FAQ & User Guide",
                     cardBg = surfaceColor,
-                    purple = primaryColor,
-                    lightPurple = MaterialTheme.colorScheme.secondary
-                ) {
-                    val intent = Intent(context, HelpSupportActivity::class.java)
-                    context.startActivity(intent)
-                }
+                    purple = primaryColor
+                ) { context.startActivity(Intent(context, HelpSupportActivity::class.java)) }
             }
 
+            // ── Information ──────────────────────────────────────────────────
+            item { SettingsSectionHeader("Information") }
             item {
                 ProfileMenuItem(
                     icon = Icons.Default.Info,
-                    title = "About",
-                    subtitle = "App version and information",
+                    title = "About App",
+                    subtitle = "Version 1.0.0  •  © 2026 Unt",
                     cardBg = surfaceColor,
-                    purple = primaryColor,
-                    lightPurple = MaterialTheme.colorScheme.secondary
-                ) {
-                    val intent = Intent(context, AboutAppActivity::class.java)
-                    context.startActivity(intent)
-                }
+                    purple = primaryColor
+                ) { context.startActivity(Intent(context, AboutAppActivity::class.java)) }
             }
 
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
+            // ── Logout ───────────────────────────────────────────────────────
             item {
                 Button(
                     onClick = onLogout,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        Icons.AutoMirrored.Filled.Logout,
                         contentDescription = "Logout",
-                        modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Logout",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    Text("Logout", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.SemiBold)
                 }
             }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
+            item { Spacer(modifier = Modifier.height(32.dp)) }
+        }
+    }
+}
+
+@Composable
+fun ProfileStatCard(title: String, value: String, modifier: Modifier, cardBg: Color, accent: Color) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = cardBg), shape = RoundedCornerShape(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(title, fontSize = 12.sp, color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun ProfileMenuItem(icon: ImageVector, title: String, subtitle: String, cardBg: Color, purple: Color, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardBg), shape = RoundedCornerShape(12.dp), onClick = onClick) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(purple.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                Icon(icon, title, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
             }
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(subtitle, fontSize = 12.sp, color = Color.Gray)
+            }
+            Icon(Icons.Default.ChevronRight, "Go", tint = Color.Gray)
         }
     }
 }
 
+/** Styled section label — separates logical groups in the settings list. */
 @Composable
-fun ProfileStatCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    cardBg: Color,
-    accent: Color
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = cardBg),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = value,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
-        }
-    }
+fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.2.sp,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp, start = 4.dp)
+    )
 }
 
+/**
+ * Contact Us card — fires an email Intent with support@unt.com pre-filled.
+ * Unlike ProfileMenuItem, it shows an email address subtitle instead of a chevron,
+ * because this navigates out of the app rather than to another screen.
+ */
 @Composable
-fun ProfileMenuItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    cardBg: Color,
-    purple: Color,
-    lightPurple: Color,
-    onClick: () -> Unit
-) {
+fun ContactUsCard(surfaceColor: Color, primaryColor: Color) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
         shape = RoundedCornerShape(12.dp),
-        onClick = onClick
+        onClick = {
+            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                data = Uri.parse("mailto:support@unt.com")
+                putExtra(Intent.EXTRA_SUBJECT, "Support Request")
+            }
+            context.startActivity(Intent.createChooser(intent, "Send Email"))
+        }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(purple.copy(alpha = 0.3f)),
+                    .background(primaryColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = lightPurple,
+                    Icons.Default.Email,
+                    contentDescription = "Contact Us",
+                    tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.size(20.dp)
                 )
             }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 16.dp)
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = subtitle,
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text("Contact Us", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("support@unt.com", fontSize = 12.sp, color = Color.Gray)
             }
-
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Go",
-                tint = Color.Gray
-            )
+            // External action — use send icon instead of chevron
+            Icon(Icons.Default.Send, contentDescription = "Open Email", tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Change Password Dialog
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun ChangePasswordDialog(userId: Int, onDismiss: () -> Unit) {
+fun ChangePasswordDialog(userId: Int, viewModel: FitnessViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    // userId is passed directly from ProfileScreenContent — no SharedPreferences needed
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val passwordResult by viewModel.passwordResult.collectAsStateWithLifecycle()
 
     val primaryColor = MaterialTheme.colorScheme.primary
-    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val error by viewModel.error.collectAsStateWithLifecycle()
+
+    LaunchedEffect(passwordResult) {
+        passwordResult?.onSuccess {
+            Toast.makeText(context, "Password updated successfully!", Toast.LENGTH_SHORT).show()
+            onDismiss()
+            viewModel.clearResults()
+        }
+    }
+
+    LaunchedEffect(error) {
+        error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearResults()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.Lock,
-                contentDescription = null,
-                tint = primaryColor,
-                modifier = Modifier.size(32.dp)
-            )
-        },
-        title = {
-            Text(
-                text = "Change Password",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = onSurfaceColor
-            )
-        },
+        title = { Text("Change Password", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = currentPassword,
-                    onValueChange = { currentPassword = it },
-                    label = { Text("Current Password", color = Color.Gray) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = primaryColor,
-                        unfocusedBorderColor = Color.Gray,
-                        focusedLabelColor = primaryColor,
-                        cursorColor = primaryColor,
-                        focusedTextColor = onSurfaceColor,
-                        unfocusedTextColor = onSurfaceColor
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                OutlinedTextField(
-                    value = newPassword,
-                    onValueChange = { newPassword = it },
-                    label = { Text("New Password", color = Color.Gray) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = primaryColor,
-                        unfocusedBorderColor = Color.Gray,
-                        focusedLabelColor = primaryColor,
-                        cursorColor = primaryColor,
-                        focusedTextColor = onSurfaceColor,
-                        unfocusedTextColor = onSurfaceColor
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                OutlinedTextField(value = currentPassword, onValueChange = { currentPassword = it }, label = { Text("Current Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, label = { Text("New Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color.Gray)
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Color.Gray) } },
         confirmButton = {
             Button(
                 onClick = {
-                    when {
-                        currentPassword.isBlank() || newPassword.isBlank() -> {
-                            android.widget.Toast.makeText(
-                                context, "Please fill in both fields.", android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        newPassword.length < 6 -> {
-                            android.widget.Toast.makeText(
-                                context, "New password must be at least 6 characters.", android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        userId == -1 -> {
-                            android.widget.Toast.makeText(
-                                context, "Session error. Please log in again.", android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        else -> {
-                            isLoading = true
-                            val request = com.example.fitnesstracker.data.network.ChangePasswordRequest(
-                                user_id = userId,
-                                current_password = currentPassword,
-                                new_password = newPassword
-                            )
-                            com.example.fitnesstracker.data.network.ApiClient.apiService
-                                .changePassword(request)
-                                .enqueue(object : retrofit2.Callback<com.example.fitnesstracker.data.network.ChangePasswordResponse> {
-                                    override fun onResponse(
-                                        call: retrofit2.Call<com.example.fitnesstracker.data.network.ChangePasswordResponse>,
-                                        response: retrofit2.Response<com.example.fitnesstracker.data.network.ChangePasswordResponse>
-                                    ) {
-                                        isLoading = false
-                                        val body = response.body()
-                                        if (body != null && body.success) {
-                                            android.widget.Toast.makeText(
-                                                context, "Password updated successfully!", android.widget.Toast.LENGTH_SHORT
-                                            ).show()
-                                            onDismiss()
-                                        } else {
-                                            android.widget.Toast.makeText(
-                                                context, body?.message ?: "Incorrect current password.", android.widget.Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    }
-
-                                    override fun onFailure(
-                                        call: retrofit2.Call<com.example.fitnesstracker.data.network.ChangePasswordResponse>,
-                                        t: Throwable
-                                    ) {
-                                        isLoading = false
-                                        val errorMsg = when (t) {
-                                            is java.net.ConnectException -> "Cannot connect to server. Check your network."
-                                            is java.net.SocketTimeoutException -> "Connection timed out."
-                                            else -> "Error: ${t.localizedMessage ?: "Unknown error"}"
-                                        }
-                                        android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
-                                    }
-                                })
-                        }
+                    if (currentPassword.isNotBlank() && newPassword.length >= 6) {
+                        viewModel.changePassword(userId, currentPassword, newPassword)
+                    } else if (newPassword.length < 6) {
+                        Toast.makeText(context, "Password must be at least 6 chars", Toast.LENGTH_SHORT).show()
                     }
                 },
                 enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                shape = RoundedCornerShape(10.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("Update", color = Color.White, fontWeight = FontWeight.Bold)
-                }
+                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                else Text("Update")
             }
         }
     )

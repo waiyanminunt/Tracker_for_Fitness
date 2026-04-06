@@ -24,11 +24,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.fitnesstracker.R
 import com.example.fitnesstracker.ui.theme.FitnesstrackerTheme
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class SplashActivity : ComponentActivity() {
 
+    private var mediaPlayer: MediaPlayer? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Task 5: Initialize MediaPlayer
+        try {
+            mediaPlayer = MediaPlayer.create(this, R.raw.splash_sound)
+            mediaPlayer?.start()
+        } catch (e: Exception) {
+            // Sound missing or error
+        }
 
         setContent {
             FitnesstrackerTheme {
@@ -55,6 +68,8 @@ class SplashActivity : ComponentActivity() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .background(backgroundColor),
             contentAlignment = Alignment.Center
         ) {
@@ -95,35 +110,26 @@ class SplashActivity : ComponentActivity() {
             }
         }
 
-                // Navigate after 3 seconds
+        // Navigate after 3 seconds
         LaunchedEffect(Unit) {
-            // Play splash sound (optional, assuming sound exists)
-            try {
-                val mediaPlayer = MediaPlayer.create(context, R.raw.splash_sound)
-                mediaPlayer.start()
-            } catch (e: Exception) {
-                // Sound file might not exist, ignore
-            }
-
             kotlinx.coroutines.delay(3000)
             
-            // 1. Check SharedPreferences for an existing USER_ID
-            // Make sure the "PrefsName" matches the exact string you use to save the data!
+            // Check for a valid saved session:
+            //   savedUserId > 0 — a real, authenticated ID was stored
+            //   rememberMe      — the user explicitly opted into auto-login
             val sharedPrefs = context.getSharedPreferences("FitnessTrackerPrefs", android.content.Context.MODE_PRIVATE)
             val savedUserId = sharedPrefs.getInt("USER_ID", -1)
-            
-            if (savedUserId != -1) {
-                // Valid USER_ID exists! Bypass Login and navigate directly to Dashboard
+            val rememberMe  = sharedPrefs.getBoolean("rememberMe", false)
+
+            if (savedUserId > 0 && rememberMe) {
+                // Valid session: bypass Login and go straight to Dashboard.
                 val intent = Intent(context, DashboardActivity::class.java)
                 intent.putExtra("USER_ID", savedUserId)
-                
-                // (Optional: Retrieve and pass USER_NAME and USER_EMAIL here as well if Dashboard needs them)
                 intent.putExtra("USER_NAME", sharedPrefs.getString("USER_NAME", "User"))
                 intent.putExtra("USER_EMAIL", sharedPrefs.getString("USER_EMAIL", ""))
-                
                 context.startActivity(intent)
             } else {
-                // No USER_ID exists, proceed to LoginActivity
+                // No session (or session intentionally expired): go to Login.
                 val intent = Intent(context, LoginActivity::class.java)
                 context.startActivity(intent)
             }
@@ -136,4 +142,10 @@ class SplashActivity : ComponentActivity() {
         animation = tween(1000, easing = FastOutSlowInEasing),
         repeatMode = RepeatMode.Reverse
     )
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer?.release()
+        mediaPlayer = null
+    }
 }
